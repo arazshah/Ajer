@@ -1,0 +1,38 @@
+services:
+  ajer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${AJER_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      DATABASE_URL: "file:/app/data/ajer.db"
+      SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET must be set}"
+      AVALAI_API_KEY: "${AVALAI_API_KEY:-}"
+      AVALAI_BASE_URL: "${AVALAI_BASE_URL:-https://api.avalai.ir/v1}"
+      AVALAI_MODEL: "${AVALAI_MODEL:-gpt-5.4-mini}"
+      SEED_DEMO_DATA: "${SEED_DEMO_DATA:-true}"
+    volumes:
+      - ajer_database:/app/data
+      - ajer_uploads:/app/public/uploads
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  ajer_database:
+  ajer_uploads:

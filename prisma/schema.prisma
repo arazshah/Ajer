@@ -1,0 +1,412 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum ContactType {
+  OWNER
+  APPLICANT
+  BOTH
+}
+
+enum TransactionType {
+  SALE
+  RENT
+  MORTGAGE_RENT
+  PRESALE
+}
+
+enum PropertyType {
+  APARTMENT
+  HOUSE
+  VILLA
+  LAND
+  COMMERCIAL
+  OFFICE
+  STORE
+  WAREHOUSE
+}
+
+enum PropertyStatus {
+  DRAFT
+  ACTIVE
+  RESERVED
+  SOLD
+  RENTED
+  INACTIVE
+  ARCHIVED
+}
+
+enum Exclusivity {
+  NORMAL
+  EXCLUSIVE
+}
+
+enum Source {
+  OWNER
+  REFERRAL
+  FIELD_RESEARCH
+  WEBSITE
+  SOCIAL_MEDIA
+  OTHER
+}
+
+enum RequirementUrgency {
+  LOW
+  NORMAL
+  HIGH
+  IMMEDIATE
+}
+
+enum RequirementStatus {
+  ACTIVE
+  PAUSED
+  FULFILLED
+  ARCHIVED
+}
+
+enum ActivityType {
+  CALL
+  MESSAGE
+  NOTE
+  FOLLOW_UP
+  MEETING
+  STATUS_CHANGE
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum VisitStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum DealType {
+  SALE
+  RENT
+  PRESALE
+}
+
+enum DealStatus {
+  NEGOTIATION
+  AGREED
+  CONTRACTED
+  CANCELLED
+  COMPLETED
+}
+
+model Agency {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String
+  address      String
+  logoUrl      String?
+  city         String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  users        User[]
+  contacts     Contact[]
+  properties   Property[]
+  requirements Requirement[]
+  activities   Activity[]
+  auditLogs    AuditLog[]
+  settings     AppSetting[]
+}
+
+model User {
+  id            String         @id @default(cuid())
+  agencyId      String
+  fullName      String
+  email         String         @unique
+  mobile        String
+  passwordHash  String
+  avatarUrl     String?
+  role          Role           @default(AGENT)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  agency        Agency         @relation(fields: [agencyId], references: [id])
+  properties    Property[]     @relation("AssignedAgent")
+  requirements  Requirement[]
+  activities    Activity[]
+  visits        Visit[]
+  deals         Deal[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([agencyId, isActive])
+}
+
+model Contact {
+  id                     String        @id @default(cuid())
+  agencyId               String
+  type                   ContactType
+  fullName               String
+  mobile                 String
+  alternatePhone         String?
+  nationalCode           String?
+  email                  String?
+  preferredContactMethod String        @default("تماس تلفنی")
+  source                 Source        @default(OTHER)
+  notes                  String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  agency                 Agency        @relation(fields: [agencyId], references: [id])
+  ownedProperties        Property[]    @relation("PropertyOwner")
+  requirements           Requirement[]
+  activities             Activity[]
+  visits                 Visit[]
+  dealsAsApplicant       Deal[]        @relation("DealApplicant")
+  dealsAsOwner           Deal[]        @relation("DealOwner")
+
+  @@unique([agencyId, mobile])
+  @@index([agencyId, type])
+  @@index([mobile])
+}
+
+model Property {
+  id               String          @id @default(cuid())
+  agencyId         String
+  assignedAgentId  String
+  ownerId          String
+  code             String          @unique
+  title            String
+  description      String
+  transactionType  TransactionType
+  propertyType     PropertyType
+  status           PropertyStatus  @default(DRAFT)
+  exclusivity      Exclusivity     @default(NORMAL)
+  source           Source          @default(OWNER)
+  city             String
+  district         String
+  neighborhood     String
+  address          String
+  postalCode       String?
+  latitude         Float
+  longitude        Float
+  area             Float
+  landArea         Float?
+  bedrooms         Int?
+  floor            Int?
+  totalFloors      Int?
+  unitsPerFloor    Int?
+  constructionYear Int?
+  direction        String?
+  documentType     String?
+  facade           String?
+  parking          Boolean         @default(false)
+  elevator         Boolean         @default(false)
+  storage          Boolean         @default(false)
+  balcony          Boolean         @default(false)
+  renovated        Boolean         @default(false)
+  priceTotal       BigInt?
+  pricePerMeter    BigInt?
+  depositAmount    BigInt?
+  monthlyRent      BigInt?
+  negotiable       Boolean         @default(false)
+  commissionNotes  String?
+  keyLocation      String?
+  availableFrom    DateTime?
+  publishedAt      DateTime?
+  lastContactAt    DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  agency           Agency          @relation(fields: [agencyId], references: [id])
+  assignedAgent    User            @relation("AssignedAgent", fields: [assignedAgentId], references: [id])
+  owner            Contact         @relation("PropertyOwner", fields: [ownerId], references: [id])
+  images           PropertyImage[]
+  activities       Activity[]
+  visits           Visit[]
+  deals            Deal[]
+
+  @@index([agencyId, status])
+  @@index([transactionType, propertyType])
+  @@index([district, neighborhood])
+  @@index([latitude, longitude])
+  @@index([assignedAgentId])
+  @@index([createdAt])
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  url        String
+  alt        String
+  sortOrder  Int      @default(0)
+  isCover    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, sortOrder])
+}
+
+model Requirement {
+  id                String             @id @default(cuid())
+  agencyId          String
+  applicantId       String
+  assignedAgentId   String
+  title             String
+  transactionType   TransactionType
+  propertyTypesJson String
+  city              String
+  neighborhoodsJson String
+  centerLatitude    Float?
+  centerLongitude   Float?
+  radiusKm          Float?
+  minArea           Float?
+  maxArea           Float?
+  minBedrooms       Int?
+  maxBedrooms       Int?
+  minBudget         BigInt?
+  maxBudget         BigInt?
+  maxDeposit        BigInt?
+  maxMonthlyRent    BigInt?
+  parkingRequired   Boolean            @default(false)
+  elevatorRequired  Boolean            @default(false)
+  notes             String?
+  urgency           RequirementUrgency @default(NORMAL)
+  status            RequirementStatus  @default(ACTIVE)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  agency            Agency             @relation(fields: [agencyId], references: [id])
+  applicant         Contact            @relation(fields: [applicantId], references: [id])
+  assignedAgent     User               @relation(fields: [assignedAgentId], references: [id])
+  activities        Activity[]
+  visits            Visit[]
+
+  @@index([agencyId, status])
+  @@index([applicantId])
+  @@index([createdAt])
+}
+
+model Activity {
+  id            String       @id @default(cuid())
+  agencyId      String
+  userId        String
+  contactId     String?
+  propertyId    String?
+  requirementId String?
+  type          ActivityType
+  subject       String
+  description   String
+  occurredAt    DateTime
+  nextActionAt  DateTime?
+  completed     Boolean      @default(false)
+  priority      Priority     @default(NORMAL)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  agency        Agency       @relation(fields: [agencyId], references: [id])
+  user          User         @relation(fields: [userId], references: [id])
+  contact       Contact?     @relation(fields: [contactId], references: [id])
+  property      Property?    @relation(fields: [propertyId], references: [id])
+  requirement   Requirement? @relation(fields: [requirementId], references: [id])
+
+  @@index([agencyId, completed, nextActionAt])
+  @@index([userId, occurredAt])
+}
+
+model Visit {
+  id              String       @id @default(cuid())
+  agencyId        String
+  propertyId      String
+  applicantId     String
+  requirementId   String?
+  assignedAgentId String
+  scheduledAt     DateTime
+  status          VisitStatus  @default(SCHEDULED)
+  feedback        String?
+  applicantRating Int?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  property        Property     @relation(fields: [propertyId], references: [id])
+  applicant       Contact      @relation(fields: [applicantId], references: [id])
+  requirement     Requirement? @relation(fields: [requirementId], references: [id])
+  assignedAgent   User         @relation(fields: [assignedAgentId], references: [id])
+
+  @@index([agencyId, scheduledAt])
+  @@index([assignedAgentId, status])
+}
+
+model Deal {
+  id               String     @id @default(cuid())
+  agencyId         String
+  propertyId       String
+  applicantId      String
+  ownerId          String
+  assignedAgentId  String
+  type             DealType
+  status           DealStatus @default(NEGOTIATION)
+  agreedPrice      BigInt?
+  depositAmount    BigInt?
+  monthlyRent      BigInt?
+  commissionAmount BigInt?
+  contractNumber   String?
+  contractDate     DateTime?
+  notes            String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  property         Property   @relation(fields: [propertyId], references: [id])
+  applicant        Contact    @relation("DealApplicant", fields: [applicantId], references: [id])
+  owner            Contact    @relation("DealOwner", fields: [ownerId], references: [id])
+  assignedAgent    User       @relation(fields: [assignedAgentId], references: [id])
+
+  @@index([agencyId, status])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  agencyId    String
+  userId      String?
+  entityType  String
+  entityId    String
+  action      String
+  changesJson String?
+  createdAt   DateTime @default(now())
+  agency      Agency   @relation(fields: [agencyId], references: [id])
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([agencyId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model AppSetting {
+  id        String   @id @default(cuid())
+  agencyId  String
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+
+  @@unique([agencyId, key])
+}

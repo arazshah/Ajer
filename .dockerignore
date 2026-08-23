@@ -1,0 +1,13 @@
+.git
+.next
+node_modules
+.env
+.env.*
+!.env.example
+prisma/dev.db*
+public/uploads/*
+!public/uploads/.gitkeep
+coverage
+test-results
+*.tsbuildinfo
+npm-debug.log*
