@@ -1,7 +1,12 @@
 FROM node:22-alpine AS dependencies
 
 WORKDIR /app
+
 ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN apk add --no-cache \
+    openssl \
+    libc6-compat
 
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -10,12 +15,17 @@ RUN npm ci
 FROM node:22-alpine AS builder
 
 WORKDIR /app
+
 ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN apk add --no-cache \
+    openssl \
+    libc6-compat
 
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
-RUN ./node_modules/.bin/prisma generate
+RUN npx prisma generate
 RUN npm run build
 
 
@@ -28,7 +38,8 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-RUN addgroup --system --gid 1001 nodejs \
+RUN apk add --no-cache openssl \
+    && addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 --ingroup nodejs nextjs
 
 COPY --from=builder /app/node_modules ./node_modules
@@ -40,7 +51,8 @@ COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN mkdir -p /app/data /app/public/uploads \
-    && chown -R nextjs:nodejs /app
+    && chown -R nextjs:nodejs /app \
+    && chmod +x /app/docker-entrypoint.sh
 
 USER nextjs
 
