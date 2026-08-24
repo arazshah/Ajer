@@ -1,35 +1,35 @@
-FROM node:22-alpine AS dependencies
+FROM node:22-bookworm-slim AS dependencies
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN apk add --no-cache \
-    openssl \
-    libc6-compat
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
 
-FROM node:22-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN apk add --no-cache \
-    openssl \
-    libc6-compat
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 
-RUN npx prisma generate
+RUN npx prisma generate --schema=prisma/schema.prisma
 RUN npm run build
 
 
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
@@ -38,9 +38,11 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-RUN apk add --no-cache openssl \
-    && addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 --ingroup nodejs nextjs
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1001 nodejs \
+    && useradd --system --uid 1001 --gid 1001 nextjs
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
