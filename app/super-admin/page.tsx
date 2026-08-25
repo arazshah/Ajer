@@ -13,6 +13,8 @@ import {
   UserCog,
   Users,
   WalletCards,
+  FileCheck2,
+  Eye,
 } from "lucide-react";
 import { requireSuperAdmin } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -25,7 +27,13 @@ import {
   updateAgencyStatus,
   updatePlan,
   revokeAgencySessionsAction,
+  reviewBillingRequest,
 } from "./actions";
+import {
+  billingRequestBadge,
+  billingRequestStatusLabels,
+  manualPaymentLabels,
+} from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "داشبورد مدیریت کل" };
@@ -40,6 +48,9 @@ const securityEventLabels: Record<string, string> = {
   AGENCY_STATUS_CHANGED: "تغییر وضعیت دفتر",
   PLATFORM_SETTING_UPDATED: "تغییر تنظیمات سراسری",
   ADMIN_ACCOUNT_UPDATED: "تغییر حساب سوپرادمین",
+  BILLING_REQUEST_APPROVED: "تأیید درخواست تمدید",
+  BILLING_REQUEST_REJECTED: "رد درخواست تمدید",
+  BILLING_REQUEST_NEEDS_INFO: "درخواست اطلاعات تمدید",
 };
 
 function SecretField({
@@ -82,8 +93,13 @@ function SecretField({
   );
 }
 
-export default async function SuperAdminPage() {
+export default async function SuperAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ billing?: string }>;
+}) {
   const admin = await requireSuperAdmin();
+  const query = await searchParams;
   const now = new Date();
   const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const [
@@ -91,12 +107,14 @@ export default async function SuperAdminPage() {
     plans,
     users,
     revenue,
+    manualRevenue,
     settings,
     activeSessions,
     blockedUsers,
     failedLogins,
     securityEvents,
     integrationEvents,
+    billingRequests,
   ] = await Promise.all([
     db.agency.findMany({
       include: { _count: { select: { users: true, properties: true } } },
@@ -108,6 +126,10 @@ export default async function SuperAdminPage() {
     db.payment.aggregate({
       where: { status: "PAID" },
       _sum: { amountToman: true },
+    }),
+    db.billingRequest.aggregate({
+      where: { status: "APPROVED" },
+      _sum: { approvedAmountToman: true },
     }),
     getPlatformSettings(),
     db.authSession.count({
@@ -137,6 +159,19 @@ export default async function SuperAdminPage() {
       },
       orderBy: { createdAt: "desc" },
       take: 200,
+    }),
+    db.billingRequest.findMany({
+      include: {
+        agency: { select: { name: true, phone: true } },
+        requestedBy: { select: { fullName: true, mobile: true } },
+        plan: { select: { title: true } },
+        receiptAsset: { select: { id: true } },
+      },
+      orderBy: [
+        { status: "asc" },
+        { createdAt: "desc" },
+      ],
+      take: 100,
     }),
   ]);
   const providerStats = ["AI", "SMS_IR", "ZARINPAL"].map((provider) => {
@@ -172,6 +207,9 @@ export default async function SuperAdminPage() {
           <a className="btn whitespace-nowrap" href="#agencies">
             <Building2 size={16} /> دفاتر
           </a>
+          <a className="btn whitespace-nowrap" href="#billing-requests">
+            <FileCheck2 size={16} /> درخواست‌های تمدید
+          </a>
           <a className="btn whitespace-nowrap" href="#plans">
             <CreditCard size={16} /> پلن‌ها
           </a>
@@ -198,7 +236,12 @@ export default async function SuperAdminPage() {
           </div>
           <div className="card stat">
             <CreditCard className="text-emerald-600" />
-            <strong>{formatToman(revenue._sum.amountToman || 0)}</strong>
+            <strong>
+              {formatToman(
+                (revenue._sum.amountToman || 0) +
+                  (manualRevenue._sum.approvedAmountToman || 0),
+              )}
+            </strong>
             <span className="subtle">درآمد ثبت‌شده</span>
           </div>
           <div className="card stat">
@@ -234,16 +277,21 @@ export default async function SuperAdminPage() {
           <div className="card stat">
             <WalletCards
               className={
-                settings.payments.enabled && settings.payments.configured
+                settings.billing.manualEnabled ||
+                (settings.payments.enabled && settings.payments.configured)
                   ? "text-emerald-600"
                   : "text-amber-600"
               }
             />
-            <strong className="text-base">پرداخت</strong>
+            <strong className="text-base">تمدید</strong>
             <span className="subtle">
-              {settings.payments.enabled && settings.payments.configured
-                ? "آماده دریافت"
-                : "نیازمند تنظیم"}
+              {settings.billing.mode === "MANUAL"
+                ? "بررسی دستی فعال"
+                : settings.billing.mode === "BOTH"
+                  ? "دستی و آنلاین"
+                  : settings.payments.configured
+                    ? "پرداخت آنلاین"
+                    : "مرچنت تنظیم نشده"}
             </span>
           </div>
         </div>
@@ -606,19 +654,19 @@ export default async function SuperAdminPage() {
                   <WalletCards />
                 </span>
                 <div>
-                  <h3 className="font-black text-lg">پرداخت زرین‌پال</h3>
+                  <h3 className="font-black text-lg">پرداخت و تمدید اشتراک</h3>
                   <p className="subtle text-sm">
-                    درگاه خرید و تمدید اشتراک دفاتر
+                    درخواست دستی، فیش و درگاه آنلاین اختیاری
                   </p>
                 </div>
               </div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  name="enabled"
-                  defaultChecked={settings.payments.enabled}
-                />{" "}
-                پرداخت آنلاین فعال باشد
+              <label>
+                <span className="label">روش فعال تمدید</span>
+                <select className="select" name="mode" defaultValue={settings.billing.mode}>
+                  <option value="MANUAL">فقط درخواست و بررسی دستی</option>
+                  <option value="ONLINE">فقط پرداخت آنلاین</option>
+                  <option value="BOTH">هر دو روش دستی و آنلاین</option>
+                </select>
               </label>
               <SecretField
                 name="merchantId"
@@ -634,6 +682,24 @@ export default async function SuperAdminPage() {
                 />{" "}
                 حالت آزمایشی Sandbox فعال باشد
               </label>
+              <div className="grid md:grid-cols-2 gap-4 border-t pt-4">
+                <label>
+                  <span className="label">نام صاحب حساب</span>
+                  <input className="input" name="accountHolder" defaultValue={settings.billing.accountHolder} />
+                </label>
+                <label>
+                  <span className="label">شماره کارت</span>
+                  <input className="input ltr text-right" name="cardNumber" defaultValue={settings.billing.cardNumber} />
+                </label>
+                <label className="md:col-span-2">
+                  <span className="label">شماره شبا</span>
+                  <input className="input ltr text-right" name="iban" defaultValue={settings.billing.iban} placeholder="IR..." />
+                </label>
+                <label className="md:col-span-2">
+                  <span className="label">راهنمای پرداخت دستی</span>
+                  <textarea className="textarea" name="instructions" rows={4} defaultValue={settings.billing.instructions} />
+                </label>
+              </div>
               <div className="rounded-xl bg-slate-50 p-3 text-sm subtle">
                 <CheckCircle2
                   className="ml-2 inline text-emerald-600"
@@ -705,6 +771,82 @@ export default async function SuperAdminPage() {
               </label>
             </div>
           </PlatformSettingsForm>
+        </section>
+
+        <section id="billing-requests" className="mb-8 scroll-mt-5">
+          <div className="section-head">
+            <div>
+              <h2 className="text-xl font-black">درخواست‌های تمدید دستی</h2>
+              <p className="subtle mt-1">
+                بررسی فیش، تعیین مبلغ نهایی، مدت دسترسی و وضعیت AI
+              </p>
+            </div>
+            <span className="badge badge-warn">
+              {billingRequests.filter((item) => ["PENDING", "NEEDS_INFO"].includes(item.status)).length.toLocaleString("fa-IR")} باز
+            </span>
+          </div>
+          {query.billing && (
+            <div className={`toast-note mb-4 ${query.billing === "approved" ? "text-green-700" : query.billing === "rejected" || query.billing === "needs_info" ? "text-amber-700" : "text-red-700"}`}>
+              {query.billing === "approved"
+                ? "اشتراک با موفقیت فعال شد."
+                : query.billing === "rejected"
+                  ? "درخواست رد شد و نتیجه به مدیر دفتر اعلام شد."
+                  : query.billing === "needs_info"
+                    ? "نیاز به اطلاعات بیشتر برای مدیر دفتر ارسال شد."
+                    : query.billing === "note"
+                      ? "برای رد یا درخواست اطلاعات، توضیح بررسی را وارد کنید."
+                      : query.billing === "stale"
+                        ? "این درخواست قبلاً بررسی یا لغو شده است."
+                        : "مقادیر مدت یا مبلغ معتبر نیست."}
+            </div>
+          )}
+          <div className="grid gap-4">
+            {billingRequests.map((item) => (
+              <article className="card p-5" key={item.id}>
+                <div className="flex flex-col xl:flex-row xl:items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <h3 className="font-black text-lg">{item.agency.name}</h3>
+                      <span className={`badge ${billingRequestBadge(item.status)}`}>{billingRequestStatusLabels[item.status]}</span>
+                      <span className="badge">{item.plan.title}{item.aiEnabled ? " + AI" : ""}</span>
+                    </div>
+                    <p className="subtle mt-2">
+                      {item.requestedBy.fullName} · <span className="ltr inline-block">{item.requestedBy.mobile}</span> · {formatDateTime(item.createdAt)}
+                    </p>
+                    <div className="flex flex-wrap gap-3 mt-3 text-sm">
+                      <span><b>روش:</b> {manualPaymentLabels[item.method]}</span>
+                      <span><b>مبلغ درخواستی:</b> {formatToman(item.requestedAmountToman)}</span>
+                      <span><b>کد پیگیری:</b> <span className="ltr inline-block">{item.referenceCode || "—"}</span></span>
+                      {item.transferDate && <span><b>تاریخ واریز:</b> {formatDate(item.transferDate)}</span>}
+                    </div>
+                    {item.notes && <p className="mt-3 rounded-xl bg-slate-50 p-3">{item.notes}</p>}
+                    {item.receiptAsset && (
+                      <a className="btn mt-3" href={`/api/super-admin/billing-receipts/${item.id}`} target="_blank" rel="noreferrer">
+                        <Eye size={16} /> مشاهده فیش خصوصی
+                      </a>
+                    )}
+                    {item.reviewNote && <p className="mt-3 text-sm"><b>نتیجه بررسی:</b> {item.reviewNote}</p>}
+                    {item.approvedEndsAt && <p className="text-emerald-700 font-bold mt-2">فعال تا {formatDate(item.approvedEndsAt)} · مبلغ نهایی {formatToman(item.approvedAmountToman || 0)}</p>}
+                  </div>
+                  {["PENDING", "NEEDS_INFO"].includes(item.status) && (
+                    <form action={reviewBillingRequest} className="grid md:grid-cols-2 gap-3 xl:w-[520px] shrink-0 rounded-2xl bg-slate-50 p-4">
+                      <input type="hidden" name="requestId" value={item.id} />
+                      <label><span className="label">مدت فعال‌سازی (روز)</span><input className="input ltr text-right" type="number" name="durationDays" min="1" max="3650" defaultValue={item.months * 30} required /></label>
+                      <label><span className="label">مبلغ تأییدشده (تومان)</span><input className="input ltr text-right" type="number" name="approvedAmountToman" min="0" defaultValue={item.requestedAmountToman} required /></label>
+                      <label className="md:col-span-2 flex gap-2 items-center rounded-xl bg-white border p-3"><input type="checkbox" name="aiEnabled" defaultChecked={item.aiEnabled} /> دسترسی AI فعال باشد</label>
+                      <label className="md:col-span-2"><span className="label">توضیح بررسی</span><textarea className="textarea" name="reviewNote" rows={3} placeholder="برای رد یا درخواست اطلاعات بیشتر الزامی است" /></label>
+                      <button className="btn btn-primary" name="decision" value="APPROVED">تأیید و فعال‌سازی</button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button className="btn" name="decision" value="NEEDS_INFO">اطلاعات بیشتر</button>
+                        <button className="btn text-red-700" name="decision" value="REJECTED">رد درخواست</button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </article>
+            ))}
+            {!billingRequests.length && <div className="card empty">هنوز درخواست تمدیدی ثبت نشده است.</div>}
+          </div>
         </section>
 
         <section id="agencies" className="mb-8 scroll-mt-5">

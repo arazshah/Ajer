@@ -18,7 +18,12 @@ export async function getAgencyEntitlement(agencyId: string) {
     };
   }
   const subscription = await db.subscription.findFirst({
-    where: { agencyId, status: "ACTIVE", endsAt: { gt: now } },
+    where: {
+      agencyId,
+      status: "ACTIVE",
+      startsAt: { lte: now },
+      endsAt: { gt: now },
+    },
     orderBy: { endsAt: "desc" },
   });
   return subscription

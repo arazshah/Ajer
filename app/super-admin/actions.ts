@@ -23,6 +23,11 @@ import {
   recordSecurityEvent,
   registerLoginFailure,
 } from "@/lib/security";
+import {
+  manualSubscriptionAmounts,
+  manualSubscriptionWindow,
+} from "@/lib/manual-billing";
+import { sendPaymentSms } from "@/lib/sms-ir";
 
 const DUMMY_PASSWORD_HASH =
   "$2b$12$oM7wox6xJ2TFiU.3fj9NRexgGEUn4JVIzEcjImF6qRKdQhXFtKL6i";
@@ -183,6 +188,166 @@ export async function revokeAgencySessionsAction(formData: FormData) {
   revalidatePath("/super-admin");
 }
 
+export async function reviewBillingRequest(formData: FormData) {
+  const admin = await requireSuperAdmin();
+  const requestId = text(formData, "requestId");
+  const decision = text(formData, "decision");
+  const reviewNote = text(formData, "reviewNote").slice(0, 1500);
+  if (!["APPROVED", "REJECTED", "NEEDS_INFO"].includes(decision)) return;
+  const request = await db.billingRequest.findUnique({
+    where: { id: requestId },
+    include: { agency: true },
+  });
+  if (!request || !["PENDING", "NEEDS_INFO"].includes(request.status))
+    redirect("/super-admin?billing=stale#billing-requests");
+
+  if (decision !== "APPROVED") {
+    if (reviewNote.length < 3)
+      redirect("/super-admin?billing=note#billing-requests");
+    const updated = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${request.id}))`;
+      return tx.billingRequest.updateMany({
+        where: {
+          id: request.id,
+          status: { in: ["PENDING", "NEEDS_INFO"] },
+        },
+        data: {
+          status: decision as "REJECTED" | "NEEDS_INFO",
+          reviewNote,
+          reviewedById: admin.id,
+          reviewedAt: new Date(),
+        },
+      });
+    });
+    if (!updated.count)
+      redirect("/super-admin?billing=stale#billing-requests");
+    const owner = await db.user.findFirst({
+      where: { agencyId: request.agencyId, role: "ADMIN", isActive: true },
+      orderBy: { createdAt: "asc" },
+    });
+    if (owner)
+      await db.notification.create({
+        data: {
+          userId: owner.id,
+          title: decision === "REJECTED" ? "درخواست تمدید رد شد" : "اطلاعات تکمیلی تمدید",
+          message: reviewNote,
+          link: "/billing",
+        },
+      });
+    await recordSecurityEvent({
+      eventType: `BILLING_REQUEST_${decision}`,
+      success: true,
+      context: await getClientContext(),
+      superAdminId: admin.id,
+      agencyId: request.agencyId,
+      metadata: { requestId: request.id },
+    });
+    revalidatePath("/super-admin");
+    revalidatePath("/billing");
+    redirect(`/super-admin?billing=${decision.toLowerCase()}#billing-requests`);
+  }
+
+  const durationDays = Number(text(formData, "durationDays"));
+  const approvedAmountToman = Number(text(formData, "approvedAmountToman"));
+  const aiEnabled = formData.get("aiEnabled") === "on";
+  if (
+    !Number.isSafeInteger(durationDays) ||
+    durationDays < 1 ||
+    durationDays > 3650 ||
+    !Number.isSafeInteger(approvedAmountToman) ||
+    approvedAmountToman < 0
+  )
+    redirect("/super-admin?billing=invalid#billing-requests");
+
+  const now = new Date();
+  const result = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${request.id}))`;
+    const fresh = await tx.billingRequest.findUnique({ where: { id: request.id } });
+    if (!fresh || !["PENDING", "NEEDS_INFO"].includes(fresh.status)) return null;
+    const current = await tx.subscription.findFirst({
+      where: { agencyId: request.agencyId, status: "ACTIVE", endsAt: { gt: now } },
+      orderBy: { endsAt: "desc" },
+    });
+    const { startsAt, endsAt } = manualSubscriptionWindow(
+      now,
+      current?.endsAt,
+      durationDays,
+    );
+    const amounts = manualSubscriptionAmounts(
+      approvedAmountToman,
+      request.aiAmountToman,
+      aiEnabled,
+    );
+    const subscription = await tx.subscription.create({
+      data: {
+        agencyId: request.agencyId,
+        planId: request.planId,
+        startsAt,
+        endsAt,
+        aiEnabled,
+        ...amounts,
+      },
+    });
+    await tx.billingRequest.update({
+      where: { id: request.id },
+      data: {
+        status: "APPROVED",
+        subscriptionId: subscription.id,
+        approvedAmountToman,
+        aiEnabled,
+        reviewNote: reviewNote || null,
+        approvedStartsAt: startsAt,
+        approvedEndsAt: endsAt,
+        reviewedById: admin.id,
+        reviewedAt: now,
+      },
+    });
+    await tx.agency.update({ where: { id: request.agencyId }, data: { status: "ACTIVE" } });
+    await tx.auditLog.create({
+      data: {
+        agencyId: request.agencyId,
+        entityType: "BillingRequest",
+        entityId: request.id,
+        action: "APPROVE_MANUAL_BILLING_REQUEST",
+        changesJson: JSON.stringify({ durationDays, approvedAmountToman, aiEnabled }),
+      },
+    });
+    return { startsAt, endsAt };
+  });
+  if (!result) redirect("/super-admin?billing=stale#billing-requests");
+  const owner = await db.user.findFirst({
+    where: { agencyId: request.agencyId, role: "ADMIN", isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (owner) {
+    await db.notification.create({
+      data: {
+        userId: owner.id,
+        title: "اشتراک دفتر فعال شد",
+        message: `درخواست تمدید تأیید و ${durationDays.toLocaleString("fa-IR")} روز دسترسی فعال شد.`,
+        link: "/billing",
+      },
+    });
+    await sendPaymentSms(owner.mobile, durationDays, {
+      agencyId: request.agencyId,
+      userId: owner.id,
+      entityType: "BillingRequest",
+      entityId: request.id,
+    }).catch((error) => console.error("Manual billing SMS failed", error));
+  }
+  await recordSecurityEvent({
+    eventType: "BILLING_REQUEST_APPROVED",
+    success: true,
+    context: await getClientContext(),
+    superAdminId: admin.id,
+    agencyId: request.agencyId,
+    metadata: { requestId: request.id, durationDays, approvedAmountToman, aiEnabled },
+  });
+  revalidatePath("/super-admin");
+  revalidatePath("/billing");
+  redirect("/super-admin?billing=approved#billing-requests");
+}
+
 export async function updatePlan(formData: FormData) {
   await requireSuperAdmin();
   const basePriceToman = Number(formData.get("basePriceToman"));
@@ -309,9 +474,17 @@ export async function updatePlatformSettings(
       });
       await updateSecret(formData, "apiKey", KEYS.smsApiKey);
     } else if (section === "payments") {
+      const mode = text(formData, "mode");
+      if (!["MANUAL", "ONLINE", "BOTH"].includes(mode))
+        return { error: "روش تمدید انتخاب‌شده معتبر نیست." };
       await savePlatformSettings({
-        [KEYS.paymentsEnabled]: String(formData.get("enabled") === "on"),
+        [KEYS.billingMode]: mode,
+        [KEYS.paymentsEnabled]: String(mode === "ONLINE" || mode === "BOTH"),
         [KEYS.zarinpalSandbox]: String(formData.get("sandbox") === "on"),
+        [KEYS.manualAccountHolder]: text(formData, "accountHolder").slice(0, 120),
+        [KEYS.manualCardNumber]: text(formData, "cardNumber").replace(/\s/g, "").slice(0, 30),
+        [KEYS.manualIban]: text(formData, "iban").replace(/\s/g, "").slice(0, 40),
+        [KEYS.manualInstructions]: text(formData, "instructions").slice(0, 1500),
       });
       await updateSecret(formData, "merchantId", KEYS.zarinpalMerchantId);
     } else if (section === "account") {

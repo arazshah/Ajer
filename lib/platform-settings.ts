@@ -15,6 +15,11 @@ export const PLATFORM_SETTING_KEYS = {
   supportPhone: "platform.supportPhone",
   trialDays: "platform.trialDays",
   signupEnabled: "platform.signupEnabled",
+  billingMode: "billing.mode",
+  manualAccountHolder: "billing.manual.accountHolder",
+  manualCardNumber: "billing.manual.cardNumber",
+  manualIban: "billing.manual.iban",
+  manualInstructions: "billing.manual.instructions",
   aiEnabled: "ai.enabled",
   aiApiKey: "ai.apiKey",
   aiBaseUrl: "ai.baseUrl",
@@ -115,6 +120,10 @@ export async function getPlatformSettings() {
     PLATFORM_SETTING_KEYS.zarinpalMerchantId,
     process.env.ZARINPAL_MERCHANT_ID || "",
   );
+  const rawBillingMode = read(PLATFORM_SETTING_KEYS.billingMode, "MANUAL");
+  const billingMode = ["MANUAL", "ONLINE", "BOTH"].includes(rawBillingMode)
+    ? (rawBillingMode as "MANUAL" | "ONLINE" | "BOTH")
+    : "MANUAL";
 
   return {
     platform: {
@@ -170,7 +179,9 @@ export async function getPlatformSettings() {
       configured: Boolean(smsApiKey),
     },
     payments: {
-      enabled: bool(read(PLATFORM_SETTING_KEYS.paymentsEnabled), true),
+      enabled:
+        (billingMode === "ONLINE" || billingMode === "BOTH") &&
+        bool(read(PLATFORM_SETTING_KEYS.paymentsEnabled), true),
       merchantId,
       sandbox: bool(
         read(
@@ -180,6 +191,18 @@ export async function getPlatformSettings() {
         false,
       ),
       configured: Boolean(merchantId),
+    },
+    billing: {
+      mode: billingMode,
+      manualEnabled: billingMode === "MANUAL" || billingMode === "BOTH",
+      onlineEnabled: billingMode === "ONLINE" || billingMode === "BOTH",
+      accountHolder: read(PLATFORM_SETTING_KEYS.manualAccountHolder),
+      cardNumber: read(PLATFORM_SETTING_KEYS.manualCardNumber),
+      iban: read(PLATFORM_SETTING_KEYS.manualIban),
+      instructions: read(
+        PLATFORM_SETTING_KEYS.manualInstructions,
+        "پس از انتخاب پلن، روش پرداخت یا درخواست تماس را ثبت کنید. نتیجه بررسی از همین صفحه اعلام می‌شود.",
+      ),
     },
   };
 }

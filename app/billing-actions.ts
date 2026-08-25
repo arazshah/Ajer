@@ -5,6 +5,7 @@ import { requireAuthenticatedUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requestZarinpalPayment } from "@/lib/zarinpal";
 import { getPlatformSettings } from "@/lib/platform-settings";
+import { revalidatePath } from "next/cache";
 
 export type PaymentState = { error?: string } | null;
 
@@ -68,4 +69,33 @@ export async function startPaymentAction(
       error: "اتصال به درگاه انجام نشد؛ تنظیمات زرین‌پال را بررسی کنید.",
     };
   }
+}
+
+export async function cancelBillingRequest(requestId: string) {
+  const user = await requireAuthenticatedUser();
+  if (user.role !== "ADMIN") return;
+  const result = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+    return tx.billingRequest.updateMany({
+      where: {
+        id: requestId,
+        agencyId: user.agencyId,
+        status: { in: ["PENDING", "NEEDS_INFO"] },
+      },
+      data: { status: "CANCELED" },
+    });
+  });
+  if (result.count) {
+    await db.auditLog.create({
+      data: {
+        agencyId: user.agencyId,
+        userId: user.id,
+        entityType: "BillingRequest",
+        entityId: requestId,
+        action: "CANCEL_MANUAL_BILLING_REQUEST",
+      },
+    });
+  }
+  revalidatePath("/billing");
+  redirect("/billing?request=canceled");
 }

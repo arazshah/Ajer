@@ -129,7 +129,11 @@ export async function verifyZarinpalPayment(input: {
   context?: IntegrationContext;
 }) {
   const { payments } = await getPlatformSettings();
-  if (!payments.enabled) throw new Error("Payments are disabled.");
+  // New purchases may be disabled while a customer is returning from a
+  // payment that started earlier. Verification must remain available as long
+  // as the merchant configuration still exists.
+  if (!payments.configured)
+    throw new Error("ZARINPAL_MERCHANT_ID is not configured.");
   const context = input.context || {};
   const { data, result } = await request<{
     code: number;
