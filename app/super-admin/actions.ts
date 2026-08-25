@@ -87,7 +87,9 @@ export async function superAdminLoginAction(
       context,
       metadata: { scope: "super-admin" },
     });
-    return { error: "ورود مدیریت موقتاً قفل شده است؛ ۱۵ دقیقه دیگر تلاش کنید." };
+    return {
+      error: "ورود مدیریت موقتاً قفل شده است؛ ۱۵ دقیقه دیگر تلاش کنید.",
+    };
   }
   const admin = await db.superAdmin.findUnique({ where: { email } });
   const passwordValid = await bcrypt.compare(
@@ -159,9 +161,11 @@ export async function updateAgencyStatus(formData: FormData) {
     where: { id: String(formData.get("agencyId")) },
     data: { status: status as "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" },
   });
-  if (status === "SUSPENDED") await revokeAgencySessions(String(formData.get("agencyId")));
+  if (status === "SUSPENDED")
+    await revokeAgencySessions(String(formData.get("agencyId")));
   await recordSecurityEvent({
-    eventType: status === "SUSPENDED" ? "AGENCY_SUSPENDED" : "AGENCY_STATUS_CHANGED",
+    eventType:
+      status === "SUSPENDED" ? "AGENCY_SUSPENDED" : "AGENCY_STATUS_CHANGED",
     success: true,
     context: await getClientContext(),
     superAdminId: admin.id,
@@ -199,11 +203,11 @@ export async function reviewBillingRequest(formData: FormData) {
     include: { agency: true },
   });
   if (!request || !["PENDING", "NEEDS_INFO"].includes(request.status))
-    redirect("/super-admin?billing=stale#billing-requests");
+    redirect("/super-admin?section=billing&billing=stale&billingFilter=open");
 
   if (decision !== "APPROVED") {
     if (reviewNote.length < 3)
-      redirect("/super-admin?billing=note#billing-requests");
+      redirect("/super-admin?section=billing&billing=note&billingFilter=open");
     const updated = await db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${request.id}))`;
       return tx.billingRequest.updateMany({
@@ -220,7 +224,7 @@ export async function reviewBillingRequest(formData: FormData) {
       });
     });
     if (!updated.count)
-      redirect("/super-admin?billing=stale#billing-requests");
+      redirect("/super-admin?section=billing&billing=stale&billingFilter=open");
     const owner = await db.user.findFirst({
       where: { agencyId: request.agencyId, role: "ADMIN", isActive: true },
       orderBy: { createdAt: "asc" },
@@ -229,7 +233,10 @@ export async function reviewBillingRequest(formData: FormData) {
       await db.notification.create({
         data: {
           userId: owner.id,
-          title: decision === "REJECTED" ? "درخواست تمدید رد شد" : "اطلاعات تکمیلی تمدید",
+          title:
+            decision === "REJECTED"
+              ? "درخواست تمدید رد شد"
+              : "اطلاعات تکمیلی تمدید",
           message: reviewNote,
           link: "/billing",
         },
@@ -244,7 +251,9 @@ export async function reviewBillingRequest(formData: FormData) {
     });
     revalidatePath("/super-admin");
     revalidatePath("/billing");
-    redirect(`/super-admin?billing=${decision.toLowerCase()}#billing-requests`);
+    redirect(
+      `/super-admin?section=billing&billing=${decision.toLowerCase()}&billingFilter=open`,
+    );
   }
 
   const durationDays = Number(text(formData, "durationDays"));
@@ -257,15 +266,22 @@ export async function reviewBillingRequest(formData: FormData) {
     !Number.isSafeInteger(approvedAmountToman) ||
     approvedAmountToman < 0
   )
-    redirect("/super-admin?billing=invalid#billing-requests");
+    redirect("/super-admin?section=billing&billing=invalid&billingFilter=open");
 
   const now = new Date();
   const result = await db.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${request.id}))`;
-    const fresh = await tx.billingRequest.findUnique({ where: { id: request.id } });
-    if (!fresh || !["PENDING", "NEEDS_INFO"].includes(fresh.status)) return null;
+    const fresh = await tx.billingRequest.findUnique({
+      where: { id: request.id },
+    });
+    if (!fresh || !["PENDING", "NEEDS_INFO"].includes(fresh.status))
+      return null;
     const current = await tx.subscription.findFirst({
-      where: { agencyId: request.agencyId, status: "ACTIVE", endsAt: { gt: now } },
+      where: {
+        agencyId: request.agencyId,
+        status: "ACTIVE",
+        endsAt: { gt: now },
+      },
       orderBy: { endsAt: "desc" },
     });
     const { startsAt, endsAt } = manualSubscriptionWindow(
@@ -302,19 +318,27 @@ export async function reviewBillingRequest(formData: FormData) {
         reviewedAt: now,
       },
     });
-    await tx.agency.update({ where: { id: request.agencyId }, data: { status: "ACTIVE" } });
+    await tx.agency.update({
+      where: { id: request.agencyId },
+      data: { status: "ACTIVE" },
+    });
     await tx.auditLog.create({
       data: {
         agencyId: request.agencyId,
         entityType: "BillingRequest",
         entityId: request.id,
         action: "APPROVE_MANUAL_BILLING_REQUEST",
-        changesJson: JSON.stringify({ durationDays, approvedAmountToman, aiEnabled }),
+        changesJson: JSON.stringify({
+          durationDays,
+          approvedAmountToman,
+          aiEnabled,
+        }),
       },
     });
     return { startsAt, endsAt };
   });
-  if (!result) redirect("/super-admin?billing=stale#billing-requests");
+  if (!result)
+    redirect("/super-admin?section=billing&billing=stale&billingFilter=open");
   const owner = await db.user.findFirst({
     where: { agencyId: request.agencyId, role: "ADMIN", isActive: true },
     orderBy: { createdAt: "asc" },
@@ -341,11 +365,16 @@ export async function reviewBillingRequest(formData: FormData) {
     context: await getClientContext(),
     superAdminId: admin.id,
     agencyId: request.agencyId,
-    metadata: { requestId: request.id, durationDays, approvedAmountToman, aiEnabled },
+    metadata: {
+      requestId: request.id,
+      durationDays,
+      approvedAmountToman,
+      aiEnabled,
+    },
   });
   revalidatePath("/super-admin");
   revalidatePath("/billing");
-  redirect("/super-admin?billing=approved#billing-requests");
+  redirect("/super-admin?section=billing&billing=approved&billingFilter=open");
 }
 
 export async function updatePlan(formData: FormData) {
@@ -481,10 +510,20 @@ export async function updatePlatformSettings(
         [KEYS.billingMode]: mode,
         [KEYS.paymentsEnabled]: String(mode === "ONLINE" || mode === "BOTH"),
         [KEYS.zarinpalSandbox]: String(formData.get("sandbox") === "on"),
-        [KEYS.manualAccountHolder]: text(formData, "accountHolder").slice(0, 120),
-        [KEYS.manualCardNumber]: text(formData, "cardNumber").replace(/\s/g, "").slice(0, 30),
-        [KEYS.manualIban]: text(formData, "iban").replace(/\s/g, "").slice(0, 40),
-        [KEYS.manualInstructions]: text(formData, "instructions").slice(0, 1500),
+        [KEYS.manualAccountHolder]: text(formData, "accountHolder").slice(
+          0,
+          120,
+        ),
+        [KEYS.manualCardNumber]: text(formData, "cardNumber")
+          .replace(/\s/g, "")
+          .slice(0, 30),
+        [KEYS.manualIban]: text(formData, "iban")
+          .replace(/\s/g, "")
+          .slice(0, 40),
+        [KEYS.manualInstructions]: text(formData, "instructions").slice(
+          0,
+          1500,
+        ),
       });
       await updateSecret(formData, "merchantId", KEYS.zarinpalMerchantId);
     } else if (section === "account") {
@@ -543,7 +582,10 @@ export async function updatePlatformSettings(
   }
 
   await recordSecurityEvent({
-    eventType: section === "account" ? "ADMIN_ACCOUNT_UPDATED" : "PLATFORM_SETTING_UPDATED",
+    eventType:
+      section === "account"
+        ? "ADMIN_ACCOUNT_UPDATED"
+        : "PLATFORM_SETTING_UPDATED",
     success: true,
     context: await getClientContext(),
     superAdminId: admin.id,
