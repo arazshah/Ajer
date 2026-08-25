@@ -34,6 +34,7 @@ export default async function Edit({
       <PropertyForm
         owners={owners}
         agents={agents}
+        city={u.agency.city}
         p={{
           ...p,
           priceTotal: p.priceTotal?.toString(),

@@ -1,6 +1,6 @@
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { formatDateTime, formatMoney, serializeBigInt } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, serializeBigInt } from "@/lib/format";
 import { label } from "@/lib/labels";
 import Link from "next/link";
 import {
@@ -17,6 +17,7 @@ import {
 import { StatusChart, MonthlyChart } from "@/components/charts";
 import { DynamicPropertyMap } from "@/components/dynamic-map";
 import { buildSixMonthTrend } from "@/lib/reporting";
+import { propertyCoverUrl } from "@/lib/property-media";
 export const metadata = { title: "داشبورد" };
 export default async function Dashboard({
   searchParams,
@@ -92,6 +93,11 @@ export default async function Dashboard({
       include: {
         assignedAgent: true,
         images: { where: { isCover: true }, take: 1 },
+        media: {
+          where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+          include: { asset: { select: { mimeType: true } } },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 5,
@@ -146,6 +152,7 @@ export default async function Dashboard({
       priceTotal: p.priceTotal?.toString(),
       depositAmount: p.depositAmount?.toString(),
       monthlyRent: p.monthlyRent?.toString(),
+      imageUrl: propertyCoverUrl(p),
     })),
   );
   return (
@@ -259,7 +266,7 @@ export default async function Dashboard({
                 </div>
               </div>
               <small>
-                {a.nextActionAt ? formatDateTime(a.nextActionAt) : "—"}
+                {a.nextActionAt ? formatDate(a.nextActionAt) : "—"}
               </small>
             </Link>
           ))}

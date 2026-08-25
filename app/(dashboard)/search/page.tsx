@@ -2,6 +2,8 @@ import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { Search, Building2, Users, ClipboardList } from "lucide-react";
+import Image from "next/image";
+import { isPrivatePropertyMedia, propertyCoverUrl } from "@/lib/property-media";
 export const metadata = { title: "جست‌وجو" };
 export default async function GlobalSearch({
   searchParams,
@@ -25,6 +27,14 @@ export default async function GlobalSearch({
               { address: { contains: q } },
               { neighborhood: { contains: q } },
             ],
+          },
+          include: {
+            images: { where: { isCover: true }, take: 1 },
+            media: {
+              where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+              include: { asset: { select: { mimeType: true } } },
+              take: 1,
+            },
           },
           take: 8,
         }),
@@ -70,18 +80,19 @@ export default async function GlobalSearch({
             <h2 className="font-black flex gap-2 mb-3">
               <Building2 /> فایل‌ها
             </h2>
-            {ps.map((p) => (
+            {ps.map((p) => {
+              const cover = propertyCoverUrl(p);
+              return (
               <Link
-                className="block p-3 border-b hover:text-brick"
+                className="flex items-center gap-3 p-3 border-b hover:text-brick"
                 href={`/properties/${p.id}`}
                 key={p.id}
               >
-                <b>{p.title}</b>
-                <small className="block subtle">
-                  {p.code} · {p.neighborhood}
-                </small>
+                <Image src={cover} alt={p.title} width={52} height={46} className="w-13 h-12 rounded-lg property-img" unoptimized={isPrivatePropertyMedia(cover)} />
+                <span><b className="block">{p.title}</b><small className="block subtle">{p.code} · {p.neighborhood}</small></span>
               </Link>
-            ))}
+              );
+            })}
           </section>
           <section className="card p-4">
             <h2 className="font-black flex gap-2 mb-3">

@@ -4,11 +4,13 @@ import {
   TileLayer,
   CircleMarker,
   Popup,
+  useMap,
   useMapEvents,
   Marker,
 } from "react-leaflet";
 import Link from "next/link";
 import L from "leaflet";
+import { useEffect } from "react";
 import { formatMoney } from "@/lib/format";
 import { label } from "@/lib/labels";
 type P = {
@@ -24,6 +26,7 @@ type P = {
   priceTotal?: string | null;
   depositAmount?: string | null;
   monthlyRent?: string | null;
+  imageUrl?: string;
 };
 export function PropertyMap({
   properties,
@@ -55,6 +58,15 @@ export function PropertyMap({
         >
           <Popup>
             <div dir="rtl" className="w-56">
+              {p.imageUrl && (
+                // The authenticated file endpoint must receive the browser cookie directly.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={p.imageUrl}
+                  alt={p.title}
+                  className="w-full h-24 object-cover rounded-lg mb-2"
+                />
+              )}
               <b className="block text-base">{p.title}</b>
               <span className="subtle">
                 {p.code} · {p.neighborhood}
@@ -112,6 +124,15 @@ function Picker({
     />
   );
 }
+function MapFocus({ value }: { value: [number, number] }) {
+  const map = useMap();
+  const lat = value[0];
+  const lon = value[1];
+  useEffect(() => {
+    map.flyTo([lat, lon], Math.max(map.getZoom(), 15), { duration: 0.8 });
+  }, [lat, lon, map]);
+  return null;
+}
 export function LocationMap({
   value,
   onChange,
@@ -129,6 +150,7 @@ export function LocationMap({
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      <MapFocus value={value} />
       <Picker value={value} onChange={onChange} />
     </MapContainer>
   );

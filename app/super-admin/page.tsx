@@ -587,6 +587,16 @@ export default async function SuperAdminPage() {
                     defaultValue={settings.sms.offerTemplateId}
                   />
                 </label>
+                <label>
+                  <span className="label">شناسه قالب بازیابی رمز</span>
+                  <input
+                    className="input ltr text-right"
+                    name="passwordResetTemplateId"
+                    inputMode="numeric"
+                    defaultValue={settings.sms.passwordResetTemplateId}
+                  />
+                  <small className="subtle">قالب SMS.ir باید پارامتر CODE داشته باشد.</small>
+                </label>
               </div>
             </PlatformSettingsForm>
 

@@ -28,6 +28,10 @@ export async function GET(
     },
   });
   if (!asset) return new Response("Not found", { status: 404 });
+  const avatarOwner = await db.user.findFirst({
+    where: { agencyId: user.agencyId, avatarUrl: `/api/files/${asset.id}` },
+    select: { id: true },
+  });
   const permitted = asset.contractAttachments.length
     ? (await hasPermission(user, "deals.view")) &&
       ((await hasPermission(user, "deals.manage_all")) ||
@@ -36,7 +40,7 @@ export async function GET(
       ? await hasPermission(user, "contacts.view")
       : asset.propertyDocs.length || asset.propertyMedia.length
         ? await hasPermission(user, "properties.view")
-        : false;
+        : Boolean(avatarOwner);
   if (!permitted) return new Response("Not found", { status: 404 });
   try {
     const bytes = await readPrivateObject(asset.storageKey);

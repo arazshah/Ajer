@@ -195,6 +195,18 @@ export async function POST(request: Request) {
           : mimeType.startsWith("video/")
             ? "VIDEO"
             : "IMAGE";
+        const hasImageCover =
+          mimeType.startsWith("image/") &&
+          Boolean(
+            await tx.propertyMedia.findFirst({
+              where: {
+                propertyId: entityId,
+                isCover: true,
+                asset: { mimeType: { startsWith: "image/" } },
+              },
+              select: { id: true },
+            }),
+          );
         await tx.propertyMedia.create({
           data: {
             agencyId: user.agencyId,
@@ -203,6 +215,7 @@ export async function POST(request: Request) {
             mediaType,
             title: text(form, "title") || file.name.slice(0, 120),
             alt: text(form, "alt", 160) || null,
+            isCover: mimeType.startsWith("image/") && !hasImageCover,
           },
         });
       } else {

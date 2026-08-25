@@ -17,7 +17,7 @@ export default async function DashboardLayout({
   ]);
   return (
     <Shell
-      user={{ fullName: user.fullName, role: user.role }}
+      user={{ fullName: user.fullName, role: user.role, avatarUrl: user.avatarUrl }}
       unread={unread}
       access={entitlement.source}
       permissions={[...permissions]}

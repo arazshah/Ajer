@@ -2,7 +2,8 @@
 import { useActionState, useState } from "react";
 import { saveProperty } from "@/app/actions";
 import { DynamicLocationMap } from "./dynamic-map";
-import { Save, CheckCircle2, MapPin } from "lucide-react";
+import { Save, CheckCircle2, MapPin, Search, LoaderCircle, Images } from "lucide-react";
+import Link from "next/link";
 type Opt = { id: string; fullName: string };
 type Agent = { id: string; fullName: string };
 type P = {
@@ -30,10 +31,12 @@ type P = {
 export function PropertyForm({
   owners,
   agents,
+  city,
   p = {},
 }: {
   owners: Opt[];
   agents: Agent[];
+  city: string;
   p?: P;
 }) {
   const [state, action, pending] = useActionState(saveProperty, null);
@@ -41,6 +44,42 @@ export function PropertyForm({
     p.latitude ?? 37.5527,
     p.longitude ?? 45.0761,
   ]);
+  const [neighborhood, setNeighborhood] = useState(p.neighborhood ?? "");
+  const [address, setAddress] = useState(p.address ?? "");
+  const [mapMessage, setMapMessage] = useState("");
+  const [mapResults, setMapResults] = useState<
+    Array<{ label: string; latitude: number; longitude: number }>
+  >([]);
+  const [locating, setLocating] = useState(false);
+
+  async function findArea() {
+    const query = [address, neighborhood, city, "ایران"].filter(Boolean).join("، ");
+    if (query.length < 3) {
+      setMapMessage("ابتدا محله یا نشانی را وارد کنید.");
+      return;
+    }
+    setLocating(true);
+    setMapMessage("");
+    setMapResults([]);
+    try {
+      const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+      const body = (await response.json()) as {
+        results?: Array<{ label: string; latitude: number; longitude: number }>;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(body.error || "جست‌وجوی محدوده انجام نشد.");
+      const results = body.results ?? [];
+      setMapResults(results);
+      if (results[0]) {
+        setLoc([results[0].latitude, results[0].longitude]);
+        setMapMessage("محدوده پیدا شد؛ نقطه دقیق را روی نقشه کلیک کنید.");
+      } else setMapMessage("محدوده‌ای پیدا نشد؛ نشانی را دقیق‌تر وارد کنید.");
+    } catch (error) {
+      setMapMessage(error instanceof Error ? error.message : "خطا در جست‌وجوی محدوده.");
+    } finally {
+      setLocating(false);
+    }
+  }
   return (
     <form action={action} className="space-y-5">
       {p.id && <input type="hidden" name="id" value={p.id} />}
@@ -136,7 +175,8 @@ export function PropertyForm({
             <input
               name="neighborhood"
               className="input"
-              defaultValue={p.neighborhood}
+              value={neighborhood}
+              onChange={(event) => setNeighborhood(event.target.value)}
               required
             />
           </div>
@@ -145,11 +185,41 @@ export function PropertyForm({
             <input
               name="address"
               className="input"
-              defaultValue={p.address}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
               required
             />
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <button
+            type="button"
+            className="btn"
+            onClick={findArea}
+            disabled={locating}
+          >
+            {locating ? <LoaderCircle className="animate-spin" size={17} /> : <Search size={17} />}
+            یافتن محدوده روی نقشه
+          </button>
+          {mapMessage && <small className="subtle">{mapMessage}</small>}
+        </div>
+        {mapResults.length > 1 && (
+          <div className="grid md:grid-cols-2 gap-2 mb-3">
+            {mapResults.map((result) => (
+              <button
+                type="button"
+                className="text-right rounded-xl border bg-white p-2 text-sm hover:border-brick"
+                key={`${result.latitude}-${result.longitude}`}
+                onClick={() => {
+                  setLoc([result.latitude, result.longitude]);
+                  setMapMessage("محدوده انتخاب شد؛ نقطه دقیق را روی نقشه کلیک کنید.");
+                }}
+              >
+                {result.label}
+              </button>
+            ))}
+          </div>
+        )}
         <DynamicLocationMap value={loc} onChange={setLoc} />
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div>
@@ -251,6 +321,23 @@ export function PropertyForm({
             />
           </div>
         </div>
+      </div>
+      <div className="card p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="font-black text-lg flex items-center gap-2">
+            <Images className="text-brick" /> ۵. تصاویر، پلان و ویدئو
+          </h2>
+          <p className="subtle mt-2">
+            {p.id
+              ? "رسانه‌ها را در صفحه پرونده ملک ببینید، حذف کنید یا تصویر اصلی را تغییر دهید."
+              : "پس از ذخیره فایل به صفحه پرونده هدایت می‌شوید و می‌توانید رسانه‌ها را بارگذاری و مدیریت کنید."}
+          </p>
+        </div>
+        {p.id && (
+          <Link className="btn" href={`/properties/${p.id}#property-media`}>
+            مدیریت رسانه‌ها
+          </Link>
+        )}
       </div>
       {state?.error && (
         <div className="toast-note text-red-600">{state.error}</div>

@@ -26,10 +26,16 @@ import {
   Images,
   BadgeCheck,
   Star,
+  Eye,
 } from "lucide-react";
 import { DynamicPropertyMap } from "@/components/dynamic-map";
 import { PrintButton } from "@/components/print-button";
-import { setDocumentStatus, setPropertyMediaCover } from "@/app/crm-actions";
+import {
+  deletePropertyMedia,
+  setDocumentStatus,
+  setPropertyMediaCover,
+} from "@/app/crm-actions";
+import { ConfirmMediaDelete } from "@/components/confirm-action";
 export default async function PropertyDetails({
   params,
   searchParams,
@@ -126,7 +132,7 @@ export default async function PropertyDetails({
               unoptimized={Boolean(privateCover)}
             />
           </div>
-          <section className="card p-5 no-print">
+          <section id="property-media" className="card p-5 no-print scroll-mt-24">
             <h2 className="font-black text-lg mb-4 flex gap-2">
               <Images className="text-brick" /> تصاویر، پلان و ویدئو
             </h2>
@@ -194,9 +200,19 @@ export default async function PropertyDetails({
                         {label(media.mediaType)}
                       </small>
                     </div>
-                    {canEdit &&
-                      media.asset.mimeType.startsWith("image/") &&
-                      !media.isCover && (
+                    <div className="flex items-center gap-1">
+                      <a
+                        className="btn p-2"
+                        href={`/api/files/${media.assetId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="مشاهده فایل اصلی"
+                      >
+                        <Eye size={15} />
+                      </a>
+                      {canEdit &&
+                        media.asset.mimeType.startsWith("image/") &&
+                        !media.isCover && (
                         <form
                           action={setPropertyMediaCover.bind(
                             null,
@@ -211,10 +227,16 @@ export default async function PropertyDetails({
                             <Star size={15} />
                           </button>
                         </form>
+                        )}
+                      {canEdit && (
+                        <ConfirmMediaDelete
+                          action={deletePropertyMedia.bind(null, p.id, media.id)}
+                        />
                       )}
-                    {media.isCover && (
-                      <span className="badge badge-active">اصلی</span>
-                    )}
+                      {media.isCover && (
+                        <span className="badge badge-active">اصلی</span>
+                      )}
+                    </div>
                   </div>
                 </article>
               ))}

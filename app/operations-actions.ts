@@ -9,14 +9,14 @@ import type {
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { formatDateTime, parseMoney, toEnglishDigits } from "@/lib/format";
+import { formatDate, formatDateTime, parseMoney, toEnglishDigits } from "@/lib/format";
 import {
   canTransitionOffer,
   canTransitionVisit,
   visitReminderTimes,
 } from "@/lib/operations";
 import { hasPermission, requirePermission } from "@/lib/permissions";
-import { parseJalaliDateTime } from "@/lib/jalali";
+import { parseJalaliDate, parseJalaliDateTime } from "@/lib/jalali";
 
 function value(fd: FormData, key: string, max = 2_000) {
   return String(fd.get(key) || "")
@@ -24,10 +24,13 @@ function value(fd: FormData, key: string, max = 2_000) {
     .slice(0, max);
 }
 
-function dateValue(fd: FormData, key: string) {
+function dateValue(fd: FormData, key: string, includeTime = false) {
   const raw = value(fd, key, 40);
   if (!raw) return null;
-  return parseJalaliDateTime(raw) ?? undefined;
+  const parsed = includeTime ? parseJalaliDateTime(raw) : parseJalaliDate(raw);
+  if (!parsed) return undefined;
+  if (!includeTime) parsed.setHours(23, 59, 59, 999);
+  return parsed;
 }
 
 function optionalMoney(fd: FormData, key: string) {
@@ -45,7 +48,7 @@ export async function createOperationalVisit(fd: FormData) {
   const applicantId = value(fd, "applicantId", 80);
   const requestedAgentId = value(fd, "assignedAgentId", 80) || user.id;
   const assignedAgentId = canManageAll ? requestedAgentId : user.id;
-  const scheduledAt = dateValue(fd, "scheduledAt");
+  const scheduledAt = dateValue(fd, "scheduledAt", true);
   if (!scheduledAt || scheduledAt.getTime() < Date.now() - 3_600_000)
     redirect("/visits?error=date");
   const [property, applicant, assignedAgent] = await Promise.all([
@@ -444,7 +447,7 @@ export async function createWorkTask(fd: FormData) {
     data: {
       userId: assignedToId,
       title: "وظیفه جدید",
-      message: `${task.title} · سررسید ${formatDateTime(dueAt)}`,
+      message: `${task.title} · سررسید ${formatDate(dueAt)}`,
       link: "/tasks",
     },
   });

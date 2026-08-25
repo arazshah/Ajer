@@ -420,8 +420,12 @@ export async function saveSetting(fd: FormData) {
 }
 export async function createActivity(fd: FormData) {
   const user = await requirePermission("activities.manage");
-  const contactId = String(fd.get("contactId")) || null;
-  const propertyId = String(fd.get("propertyId")) || null;
+  const contactId = String(fd.get("contactId") || "").trim() || null;
+  const propertyId = String(fd.get("propertyId") || "").trim() || null;
+  const subject = String(fd.get("subject") || "").trim();
+  const description = String(fd.get("description") || "").trim();
+  if (subject.length < 2 || description.length < 2)
+    redirect("/activities?error=content");
   const [contact, property] = await Promise.all([
     contactId
       ? db.contact.findFirst({
@@ -434,26 +438,27 @@ export async function createActivity(fd: FormData) {
         })
       : null,
   ]);
-  if ((contactId && !contact) || (propertyId && !property)) return;
-  const nextActionAt = parseJalaliDateTime(
-    String(fd.get("nextActionAt") || ""),
-  );
-  if (!nextActionAt) return;
-  await db.activity.create({
+  if ((contactId && !contact) || (propertyId && !property))
+    redirect("/activities?error=reference");
+  const nextActionAt = parseJalaliDate(String(fd.get("nextActionAt") || ""));
+  if (!nextActionAt) redirect("/activities?error=date");
+  nextActionAt.setHours(23, 59, 59, 999);
+  const activity = await db.activity.create({
     data: {
       agencyId: user.agencyId,
       userId: user.id,
       contactId,
       propertyId,
       type: "FOLLOW_UP",
-      subject: String(fd.get("subject")),
-      description: String(fd.get("description")),
+      subject,
+      description,
       occurredAt: new Date(),
       nextActionAt,
       priority: "NORMAL",
     },
   });
   revalidatePath("/activities");
+  redirect(`/activities?created=${activity.id}`);
 }
 export async function createVisit(fd: FormData) {
   const user = await requirePermission("visits.manage");

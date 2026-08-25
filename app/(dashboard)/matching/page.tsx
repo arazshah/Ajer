@@ -13,6 +13,7 @@ import {
   Phone,
   Plus,
 } from "lucide-react";
+import { isPrivatePropertyMedia, propertyCoverUrl } from "@/lib/property-media";
 export const metadata = { title: "تطبیق هوشمند" };
 export default async function Matching({
   searchParams,
@@ -34,7 +35,14 @@ export default async function Matching({
     requirements[0];
   const properties = await db.property.findMany({
     where: { agencyId: user.agencyId, status: "ACTIVE" },
-    include: { images: { where: { isCover: true }, take: 1 } },
+    include: {
+      images: { where: { isCover: true }, take: 1 },
+      media: {
+        where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+        include: { asset: { select: { mimeType: true } } },
+        take: 1,
+      },
+    },
   });
   const matches = requirement
     ? properties
@@ -172,15 +180,18 @@ export default async function Matching({
         </div>
       )}
       <div className="grid lg:grid-cols-2 gap-4">
-        {matches.map(({ property, match }) => (
+        {matches.map(({ property, match }) => {
+          const cover = propertyCoverUrl(property);
+          return (
           <article className="card p-4 flex gap-4" key={property.id}>
             <div className="relative">
               <Image
                 className="w-36 h-32 rounded-xl property-img"
-                src={property.images[0]?.url ?? "/property-1.png"}
+                src={cover}
                 alt=""
                 width={144}
                 height={128}
+                unoptimized={isPrivatePropertyMedia(cover)}
               />
               <div className="absolute -top-2 -right-2 w-14 h-14 rounded-full bg-ink text-white grid place-items-center font-black text-lg border-4 border-white">
                 {match.score}
@@ -230,7 +241,8 @@ export default async function Matching({
               </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
     </>
   );

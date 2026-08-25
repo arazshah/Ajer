@@ -16,6 +16,7 @@ import { hasPermission } from "@/lib/permissions";
 import { getPlatformSettings } from "@/lib/platform-settings";
 import { fetchJsonWithPolicy, ProviderHttpError } from "@/lib/provider-http";
 import { consumeRateLimit } from "@/lib/security";
+import { propertyCoverUrl } from "@/lib/property-media";
 
 const requestSchema = z.object({
   query: z
@@ -168,6 +169,11 @@ export async function POST(request: Request) {
       },
       include: {
         images: { where: { isCover: true }, take: 1 },
+        media: {
+          where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+          include: { asset: { select: { mimeType: true } } },
+          take: 1,
+        },
         assignedAgent: { select: { fullName: true } },
       },
       take: 100,
@@ -197,7 +203,7 @@ export async function POST(request: Request) {
         priceTotal: property.priceTotal,
         depositAmount: property.depositAmount,
         monthlyRent: property.monthlyRent,
-        imageUrl: property.images[0]?.url ?? "/property-1.png",
+        imageUrl: propertyCoverUrl(property),
         assignedAgent: property.assignedAgent.fullName,
         score: match.score,
         reasons: match.reasons,

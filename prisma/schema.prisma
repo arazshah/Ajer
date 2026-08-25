@@ -441,6 +441,7 @@ model User {
   authSessions               AuthSession[]
   securityEvents             SecurityEvent[]
   integrationEvents          IntegrationEvent[]
+  passwordResetChallenges    PasswordResetChallenge[]
 
   @@index([agencyId, isActive])
 }
@@ -1483,6 +1484,21 @@ model AuthSession {
   @@index([userId, revokedAt, expiresAt])
   @@index([superAdminId, revokedAt, expiresAt])
   @@index([agencyId, revokedAt, expiresAt])
+}
+
+model PasswordResetChallenge {
+  id          String    @id @default(cuid())
+  userId      String
+  codeHash    String
+  expiresAt   DateTime
+  attempts    Int       @default(0)
+  consumedAt  DateTime?
+  requestedIp String?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt, consumedAt])
 }
 
 model LoginThrottle {

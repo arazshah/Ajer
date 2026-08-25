@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import {
   LayoutDashboard,
   Map,
@@ -26,8 +27,11 @@ import {
   ListTodo,
   ArrowLeftRight,
   Landmark,
+  CircleUserRound,
+  X,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions";
+import Image from "next/image";
 const nav = [
   ["/dashboard", "داشبورد", LayoutDashboard, "dashboard.view"],
   ["/map", "نقشه املاک", Map, "properties.view"],
@@ -45,6 +49,7 @@ const nav = [
   ["/reports", "گزارش‌ها", ChartNoAxesCombined, "reports.view"],
   ["/users", "کاربران", UserCog, "users.manage"],
   ["/billing", "اشتراک و پرداخت", CreditCard, "settings.manage"],
+  ["/profile", "پروفایل من", CircleUserRound, "dashboard.view"],
   ["/help", "راهنمای آجر", CircleHelp, "dashboard.view"],
   ["/settings", "تنظیمات", Settings, "settings.manage"],
 ] as const;
@@ -56,15 +61,32 @@ export function Shell({
   permissions,
 }: {
   children: React.ReactNode;
-  user: { fullName: string; role: string };
+  user: { fullName: string; role: string; avatarUrl: string | null };
   unread: number;
   access: "trial" | "subscription" | "none";
   permissions: string[];
 }) {
   const p = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="shell">
-      <aside className="sidebar">
+      {menuOpen && (
+        <button
+          type="button"
+          className="sidebar-overlay"
+          aria-label="بستن فهرست"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+        <button
+          type="button"
+          className="sidebar-close"
+          onClick={() => setMenuOpen(false)}
+          aria-label="بستن فهرست"
+        >
+          <X />
+        </button>
         <Link href="/dashboard" className="flex items-center gap-3 px-2 mb-7">
           <div className="brand-mark">آ</div>
           <div>
@@ -72,13 +94,14 @@ export function Shell({
             <small className="text-white/50">مالک و مستأجر</small>
           </div>
         </Link>
-        <nav className="flex-1 overflow-auto">
+        <nav className="sidebar-nav">
           {nav
             .filter(([, , , permission]) => permissions.includes(permission))
             .map(([href, title, Icon]) => (
               <Link
                 key={href}
                 href={href}
+                onClick={() => setMenuOpen(false)}
                 className={`nav-link ${p.startsWith(href) ? "active" : ""}`}
               >
                 <Icon size={19} />
@@ -86,23 +109,15 @@ export function Shell({
               </Link>
             ))}
         </nav>
-        <div className="border-t border-white/10 pt-4 mt-3 text-xs text-white/45 leading-6">
-          آجر؛ مدیریت حرفه‌ای املاک ایران
-          <br />
-          طراحی و توسعه:{" "}
-          <a
-            className="text-white/75 hover:text-white"
-            href="https://araz.me"
-            target="_blank"
-            rel="noreferrer"
-          >
-            آراز شاه‌کرمی
-          </a>
-        </div>
       </aside>
       <div className="main">
         <header className="topbar">
-          <button className="btn p-2 mobile-menu" aria-label="فهرست">
+          <button
+            type="button"
+            className="btn p-2 mobile-menu"
+            aria-label="فهرست"
+            onClick={() => setMenuOpen(true)}
+          >
             <Menu />
           </button>
           {permissions.includes("properties.view") ? (
@@ -142,9 +157,11 @@ export function Shell({
           </Link>
           <details className="relative">
             <summary className="list-none cursor-pointer flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full bg-ink text-white grid place-items-center font-bold">
-                {user.fullName[0]}
-              </div>
+              {user.avatarUrl ? (
+                <Image src={user.avatarUrl} alt={user.fullName} width={36} height={36} unoptimized className="w-9 h-9 rounded-full object-cover" />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-ink text-white grid place-items-center font-bold">{user.fullName[0]}</div>
+              )}
               <div className="hidden lg:block">
                 <b className="text-sm block">{user.fullName}</b>
                 <small className="subtle">
@@ -154,6 +171,12 @@ export function Shell({
               <ChevronDown size={14} />
             </summary>
             <div className="absolute left-0 mt-3 card p-2 w-44 z-50">
+              <Link
+                href="/profile"
+                className="w-full flex gap-2 p-2 hover:bg-slate-50 rounded-lg"
+              >
+                <CircleUserRound size={17} /> پروفایل من
+              </Link>
               <form action={logoutAction}>
                 <button className="w-full flex gap-2 p-2 hover:bg-slate-50 rounded-lg text-red-600">
                   <LogOut size={17} /> خروج
@@ -164,19 +187,13 @@ export function Shell({
         </header>
         <main className="content">
           {children}
-          <footer className="text-center subtle text-xs py-8">
-            آجر؛ مالک و مستأجر · سیستم مدیریت حرفه‌ای املاک ایران · ساخته‌شده
-            توسط{" "}
-            <a
-              className="text-brick font-bold"
-              href="https://araz.me"
-              target="_blank"
-              rel="noreferrer"
-            >
-              آراز شاه‌کرمی
-            </a>
-          </footer>
         </main>
+        <footer className="app-footer">
+          آجر؛ مالک و مستأجر · سیستم مدیریت حرفه‌ای املاک ایران · ساخته‌شده توسط{" "}
+          <a href="https://araz.me" target="_blank" rel="noreferrer">
+            آراز شاه‌کرمی
+          </a>
+        </footer>
       </div>
     </div>
   );

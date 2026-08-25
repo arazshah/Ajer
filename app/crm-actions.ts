@@ -8,6 +8,7 @@ import { normalizeMobile, toEnglishDigits } from "@/lib/format";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import type { ContactType, LeadStatus, Source } from "@prisma/client";
 import { parseJalaliDate } from "@/lib/jalali";
+import { deletePrivateObject } from "@/lib/uploads";
 
 function value(fd: FormData, key: string) {
   return String(fd.get(key) || "").trim();
@@ -188,4 +189,43 @@ export async function setPropertyMediaCover(
     }),
   ]);
   revalidatePath(`/properties/${propertyId}`);
+}
+
+export async function deletePropertyMedia(propertyId: string, mediaId: string) {
+  const user = await requirePermission("properties.view");
+  const canManageAll = await hasPermission(user, "properties.manage_all");
+  const media = await db.propertyMedia.findFirst({
+    where: {
+      id: mediaId,
+      propertyId,
+      agencyId: user.agencyId,
+      property: {
+        ...(!canManageAll ? { assignedAgentId: user.id } : {}),
+      },
+    },
+    include: { asset: true },
+  });
+  if (!media) return;
+  await db.$transaction(async (tx) => {
+    await tx.propertyMedia.delete({ where: { id: media.id } });
+    await tx.fileAsset.delete({ where: { id: media.assetId } });
+    if (media.isCover) {
+      const nextImage = await tx.propertyMedia.findFirst({
+        where: {
+          propertyId,
+          asset: { mimeType: { startsWith: "image/" } },
+        },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      });
+      if (nextImage)
+        await tx.propertyMedia.update({
+          where: { id: nextImage.id },
+          data: { isCover: true },
+        });
+    }
+  });
+  await deletePrivateObject(media.asset.storageKey);
+  revalidatePath(`/properties/${propertyId}`);
+  revalidatePath("/properties");
+  revalidatePath("/dashboard");
 }

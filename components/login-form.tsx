@@ -2,7 +2,8 @@
 import { useActionState } from "react";
 import { loginAction } from "@/app/actions";
 import { Loader2, LogIn } from "lucide-react";
-export function LoginForm() {
+import Link from "next/link";
+export function LoginForm({ demo = false }: { demo?: boolean }) {
   const [state, action, pending] = useActionState(loginAction, null);
   return (
     <form action={action} className="space-y-4">
@@ -15,7 +16,7 @@ export function LoginForm() {
           id="email"
           name="email"
           type="email"
-          defaultValue="admin@ajer.ir"
+          defaultValue={demo ? "admin@ajer.ir" : ""}
           required
         />
       </div>
@@ -28,7 +29,7 @@ export function LoginForm() {
           id="password"
           name="password"
           type="password"
-          defaultValue="Ajer123!"
+          defaultValue={demo ? "Ajer123!" : ""}
           required
         />
       </div>
@@ -49,6 +50,9 @@ export function LoginForm() {
         )}{" "}
         ورود به آجر
       </button>
+      <Link href="/forgot-password" className="block text-center text-brick font-bold">
+        رمز عبور را فراموش کرده‌اید؟
+      </Link>
     </form>
   );
 }

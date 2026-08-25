@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeftRight, BadgeCheck, Banknote, Handshake } from "lucide-react";
 import { db } from "@/lib/db";
-import { formatDateTime, formatMoney } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import { createSalesOffer, updateOfferStatus } from "@/app/operations-actions";
@@ -161,7 +161,7 @@ export default async function Offers({
               />
               <label>
                 <span className="label">اعتبار پیشنهاد تا</span>
-                <JalaliDateInput name="expiresAt" includeTime />
+                <JalaliDateInput name="expiresAt" />
               </label>
               <button className="btn btn-primary">ثبت و ارسال پیشنهاد</button>
             </form>
@@ -239,7 +239,7 @@ export default async function Offers({
             <small className="block subtle mt-3">
               ثبت: {formatDateTime(offer.createdAt)}
               {offer.expiresAt
-                ? ` · اعتبار: ${formatDateTime(offer.expiresAt)}`
+                ? ` · اعتبار: ${formatDate(offer.expiresAt)}`
                 : ""}
             </small>
             {canManage && ["SUBMITTED", "COUNTERED"].includes(offer.status) && (

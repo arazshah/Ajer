@@ -4,8 +4,13 @@ import { LoginForm } from "@/components/login-form";
 import { MapPin, Building2, Route, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 export const metadata = { title: "ورود" };
-export default async function Login() {
+export default async function Login({
+  searchParams,
+}: {
+  searchParams: Promise<{ reset?: string; passwordChanged?: string }>;
+}) {
   if (await getSessionUser()) redirect("/dashboard");
+  const query = await searchParams;
   const showDemoCredentials =
     process.env.NODE_ENV === "development" &&
     process.env.SEED_DEMO_DATA === "true";
@@ -22,7 +27,14 @@ export default async function Login() {
           </div>
           <h1 className="text-3xl font-black mb-2">خوش آمدید</h1>
           <p className="subtle mb-7">از فایل تا قرارداد، روی نقشه</p>
-          <LoginForm />
+          {(query.reset || query.passwordChanged) && (
+            <div className="toast-note mb-4 text-green-700">
+              {query.reset
+                ? "رمز جدید ثبت شد؛ اکنون وارد شوید."
+                : "رمز تغییر کرد؛ برای امنیت دوباره وارد شوید."}
+            </div>
+          )}
+          <LoginForm demo={showDemoCredentials} />
           <p className="text-center mt-5">
             هنوز حساب ندارید؟{" "}
             <Link className="text-brick font-bold" href="/signup">

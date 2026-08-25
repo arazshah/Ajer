@@ -165,6 +165,7 @@ export function AiPropertySearch() {
                     width={96}
                     height={96}
                     alt=""
+                    unoptimized={item.imageUrl.startsWith("/api/files/")}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex justify-between gap-2">

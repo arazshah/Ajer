@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CheckCircle2, CircleDashed, ListTodo, TimerOff } from "lucide-react";
 import { db } from "@/lib/db";
-import { formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import { createWorkTask, updateWorkTaskStatus } from "@/app/operations-actions";
@@ -140,7 +140,7 @@ export default async function Tasks({
                 <option value="NORMAL">عادی</option>
                 <option value="HIGH">زیاد</option>
               </select>
-              <JalaliDateInput name="dueAt" includeTime required />
+              <JalaliDateInput name="dueAt" required />
             </div>
             <button className="btn btn-primary">واگذاری وظیفه</button>
           </form>
@@ -211,7 +211,7 @@ export default async function Tasks({
               </div>
               <div className="md:text-left">
                 <b className={overdue ? "text-red-600" : ""}>
-                  {formatDateTime(task.dueAt)}
+                  {formatDate(task.dueAt)}
                 </b>
                 <small className="block subtle">
                   مسئول: {task.assignedTo.fullName}

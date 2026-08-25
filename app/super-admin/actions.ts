@@ -286,6 +286,9 @@ export async function updatePlatformSettings(
           offerTemplateId: z
             .string()
             .regex(/^\d*$/, "شناسه قالب وضعیت پیشنهاد باید عدد باشد."),
+          passwordResetTemplateId: z
+            .string()
+            .regex(/^\d*$/, "شناسه قالب بازیابی رمز باید عدد باشد."),
         })
         .parse({
           baseUrl: text(formData, "baseUrl"),
@@ -293,6 +296,7 @@ export async function updatePlatformSettings(
           paymentTemplateId: text(formData, "paymentTemplateId"),
           visitTemplateId: text(formData, "visitTemplateId"),
           offerTemplateId: text(formData, "offerTemplateId"),
+          passwordResetTemplateId: text(formData, "passwordResetTemplateId"),
         });
       await savePlatformSettings({
         [KEYS.smsEnabled]: String(formData.get("enabled") === "on"),
@@ -301,6 +305,7 @@ export async function updatePlatformSettings(
         [KEYS.smsPaymentTemplateId]: input.paymentTemplateId,
         [KEYS.smsVisitTemplateId]: input.visitTemplateId,
         [KEYS.smsOfferTemplateId]: input.offerTemplateId,
+        [KEYS.smsPasswordResetTemplateId]: input.passwordResetTemplateId,
       });
       await updateSecret(formData, "apiKey", KEYS.smsApiKey);
     } else if (section === "payments") {

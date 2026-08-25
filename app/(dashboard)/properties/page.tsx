@@ -8,6 +8,7 @@ import { Plus, Search, Eye, Pencil, Copy } from "lucide-react";
 import { archiveProperty, duplicateProperty } from "@/app/actions";
 import { ConfirmArchive } from "@/components/confirm-action";
 import { AiPropertySearch } from "@/components/ai-property-search";
+import { isPrivatePropertyMedia, propertyCoverUrl } from "@/lib/property-media";
 export const metadata = { title: "فایل‌های ملکی" };
 export default async function Properties({
   searchParams,
@@ -52,6 +53,11 @@ export default async function Properties({
         owner: true,
         assignedAgent: true,
         images: { where: { isCover: true }, take: 1 },
+        media: {
+          where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+          include: { asset: { select: { mimeType: true } } },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * 10,
@@ -120,16 +126,18 @@ export default async function Properties({
             </tr>
           </thead>
           <tbody>
-            {items.map((p) => (
-              <tr key={p.id}>
+            {items.map((p) => {
+              const cover = propertyCoverUrl(p);
+              return <tr key={p.id}>
                 <td>
                   <div className="flex gap-3 items-center">
                     <Image
                       className="w-14 h-12 rounded-lg property-img"
-                      src={p.images[0]?.url ?? "/property-1.png"}
+                      src={cover}
                       alt=""
                       width={56}
                       height={48}
+                      unoptimized={isPrivatePropertyMedia(cover)}
                     />
                     <div>
                       <Link
@@ -193,8 +201,8 @@ export default async function Properties({
                     )}
                   </div>
                 </td>
-              </tr>
-            ))}
+              </tr>;
+            })}
           </tbody>
         </table>
         {!items.length && (

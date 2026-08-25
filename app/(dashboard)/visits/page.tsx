@@ -296,8 +296,7 @@ export default async function Visits({
                     </select>
                     <JalaliDateInput
                       name="followUpAt"
-                      includeTime
-                      aria-label="زمان پیگیری بعدی"
+                      aria-label="تاریخ پیگیری بعدی"
                     />
                     <button className="btn btn-primary md:col-span-2">
                       ذخیره نتیجه

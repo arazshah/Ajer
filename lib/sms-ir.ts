@@ -110,3 +110,17 @@ export async function sendPaymentSms(
     context,
   );
 }
+
+export async function sendPasswordResetSms(
+  mobile: string,
+  code: string,
+  context: IntegrationContext = {},
+) {
+  const { sms } = await getPlatformSettings();
+  return sendSmsTemplate(
+    mobile,
+    Number(sms.passwordResetTemplateId) || undefined,
+    [{ name: "CODE", value: code }],
+    context,
+  );
+}

@@ -6,6 +6,7 @@ import { DynamicPropertyMap } from "@/components/dynamic-map";
 import Link from "next/link";
 import Image from "next/image";
 import { Search, SlidersHorizontal, MapPinned } from "lucide-react";
+import { isPrivatePropertyMedia, propertyCoverUrl } from "@/lib/property-media";
 export const metadata = { title: "نقشه املاک" };
 export default async function MapPage({
   searchParams,
@@ -37,7 +38,14 @@ export default async function MapPage({
   const [ps, ns] = await Promise.all([
     db.property.findMany({
       where,
-      include: { images: { where: { isCover: true }, take: 1 } },
+      include: {
+        images: { where: { isCover: true }, take: 1 },
+        media: {
+          where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+          include: { asset: { select: { mimeType: true } } },
+          take: 1,
+        },
+      },
       orderBy: { createdAt: "desc" },
       take: 100,
     }),
@@ -53,6 +61,7 @@ export default async function MapPage({
       priceTotal: p.priceTotal?.toString(),
       depositAmount: p.depositAmount?.toString(),
       monthlyRent: p.monthlyRent?.toString(),
+      imageUrl: propertyCoverUrl(p),
     })),
   );
   return (
@@ -104,7 +113,9 @@ export default async function MapPage({
       </form>
       <div className="grid lg:grid-cols-[380px_1fr] gap-4">
         <div className="card p-3 max-h-[620px] overflow-auto">
-          {ps.map((p) => (
+          {ps.map((p) => {
+            const cover = propertyCoverUrl(p);
+            return (
             <Link
               href={`/properties/${p.id}`}
               className="flex gap-3 p-3 border-b hover:bg-[#faf8f5] rounded-xl"
@@ -112,10 +123,11 @@ export default async function MapPage({
             >
               <Image
                 className="w-24 h-20 rounded-xl property-img"
-                src={p.images[0]?.url ?? "/property-1.png"}
+                src={cover}
                 alt=""
                 width={96}
                 height={80}
+                unoptimized={isPrivatePropertyMedia(cover)}
               />
               <div className="min-w-0">
                 <b className="block truncate">{p.title}</b>
@@ -128,7 +140,8 @@ export default async function MapPage({
                 <span className="badge">{label(p.status)}</span>
               </div>
             </Link>
-          ))}
+            );
+          })}
           {!ps.length && <div className="empty">در این محدوده فایلی نیست.</div>}
         </div>
         <DynamicPropertyMap properties={data} />

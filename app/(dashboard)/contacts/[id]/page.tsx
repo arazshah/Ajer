@@ -18,6 +18,8 @@ import { label } from "@/lib/labels";
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import { saveContactCrmProfile, setDocumentStatus } from "@/app/crm-actions";
 import { JalaliDateInput } from "@/components/jalali-date-input";
+import Image from "next/image";
+import { isPrivatePropertyMedia, propertyCoverUrl } from "@/lib/property-media";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +48,14 @@ export default async function ContactDetails({
           orderBy: { createdAt: "desc" },
         },
         ownedProperties: {
-          include: { images: { where: { isCover: true }, take: 1 } },
+          include: {
+            images: { where: { isCover: true }, take: 1 },
+            media: {
+              where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+              include: { asset: { select: { mimeType: true } } },
+              take: 1,
+            },
+          },
           orderBy: { createdAt: "desc" },
         },
         requirements: { orderBy: { createdAt: "desc" } },
@@ -414,20 +423,31 @@ export default async function ContactDetails({
               <Building2 className="text-blue-600" /> فایل‌ها و درخواست‌ها
             </h2>
             <div className="grid md:grid-cols-2 gap-3">
-              {contact.ownedProperties.map((property) => (
+              {contact.ownedProperties.map((property) => {
+                const cover = propertyCoverUrl(property);
+                return (
                 <Link
-                  className="rounded-xl border p-3 hover:border-brick"
+                  className="rounded-xl border p-3 hover:border-brick flex gap-3"
                   href={`/properties/${property.id}`}
                   key={property.id}
                 >
-                  <b>
-                    {property.code} · {property.title}
-                  </b>
-                  <small className="block subtle mt-1">
-                    {label(property.transactionType)} · {property.neighborhood}
-                  </small>
+                  <Image
+                    src={cover}
+                    alt={property.title}
+                    width={64}
+                    height={56}
+                    className="w-16 h-14 rounded-lg property-img"
+                    unoptimized={isPrivatePropertyMedia(cover)}
+                  />
+                  <span>
+                    <b className="block">{property.code} · {property.title}</b>
+                    <small className="block subtle mt-1">
+                      {label(property.transactionType)} · {property.neighborhood}
+                    </small>
+                  </span>
                 </Link>
-              ))}
+                );
+              })}
               {contact.requirements.map((requirement) => (
                 <div className="rounded-xl border p-3" key={requirement.id}>
                   <b>{requirement.title}</b>

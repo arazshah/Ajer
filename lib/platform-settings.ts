@@ -26,6 +26,7 @@ export const PLATFORM_SETTING_KEYS = {
   smsPaymentTemplateId: "sms.paymentTemplateId",
   smsVisitTemplateId: "sms.visitTemplateId",
   smsOfferTemplateId: "sms.offerTemplateId",
+  smsPasswordResetTemplateId: "sms.passwordResetTemplateId",
   paymentsEnabled: "payments.enabled",
   zarinpalMerchantId: "payments.zarinpalMerchantId",
   zarinpalSandbox: "payments.zarinpalSandbox",
@@ -161,6 +162,10 @@ export async function getPlatformSettings() {
       offerTemplateId: read(
         PLATFORM_SETTING_KEYS.smsOfferTemplateId,
         process.env.SMSIR_OFFER_TEMPLATE_ID || "",
+      ),
+      passwordResetTemplateId: read(
+        PLATFORM_SETTING_KEYS.smsPasswordResetTemplateId,
+        process.env.SMSIR_PASSWORD_RESET_TEMPLATE_ID || "",
       ),
       configured: Boolean(smsApiKey),
     },

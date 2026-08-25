@@ -20,7 +20,7 @@ export default async function NewProperty() {
       <p className="subtle mb-5">
         مشخصات فایل را کامل کنید و محل آن را روی نقشه نشان دهید.
       </p>
-      <PropertyForm owners={owners} agents={agents} />
+      <PropertyForm owners={owners} agents={agents} city={u.agency.city} />
     </>
   );
 }

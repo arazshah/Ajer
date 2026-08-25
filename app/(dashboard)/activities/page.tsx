@@ -1,6 +1,6 @@
 import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
-import { formatDateTime } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { toggleActivity, createActivity } from "@/app/actions";
 import { JalaliDateInput } from "@/components/jalali-date-input";
@@ -15,7 +15,12 @@ export const metadata = { title: "پیگیری‌ها" };
 export default async function Activities({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; property?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    property?: string;
+    created?: string;
+    error?: string;
+  }>;
 }) {
   const u = await requirePermission("activities.manage"),
     s = await searchParams,
@@ -94,11 +99,26 @@ export default async function Activities({
                 </option>
               ))}
             </select>
-            <JalaliDateInput name="nextActionAt" includeTime required />
+            <div>
+              <label className="label">تاریخ اقدام بعدی</label>
+              <JalaliDateInput name="nextActionAt" required />
+            </div>
             <button className="btn btn-primary">ذخیره پیگیری</button>
           </form>
         </details>
       </div>
+      {s.created && (
+        <div className="toast-note mb-4 text-green-700">پیگیری با موفقیت ثبت شد.</div>
+      )}
+      {s.error && (
+        <div className="toast-note mb-4 text-red-700">
+          {s.error === "date"
+            ? "تاریخ پیگیری را به‌صورت شمسی وارد کنید."
+            : s.error === "reference"
+              ? "مخاطب یا فایل انتخاب‌شده معتبر نیست."
+              : "موضوع و شرح پیگیری را کامل کنید."}
+        </div>
+      )}
       <div className="flex gap-2 mb-4">
         {[
           ["today", "باز"],
@@ -154,7 +174,7 @@ export default async function Activities({
               <div className="text-left">
                 <b className={overdue ? "text-red-600" : ""}>
                   {a.nextActionAt
-                    ? formatDateTime(a.nextActionAt)
+                    ? formatDate(a.nextActionAt)
                     : "بدون موعد"}
                 </b>
                 <small className="block subtle">{a.user.fullName}</small>
