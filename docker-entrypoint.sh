@@ -8,4 +8,4 @@ if [ "${SEED_DEMO_DATA:-false}" = "true" ]; then
   SEED_ONLY_IF_EMPTY=true ./node_modules/.bin/tsx prisma/seed.ts
 fi
 
-exec node .next/standalone/server.js
+exec node server.js

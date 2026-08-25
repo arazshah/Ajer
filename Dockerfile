@@ -12,7 +12,12 @@ RUN apt-get update \
 FROM base AS dependencies
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
+
+
+FROM dependencies AS production-dependencies
+
+RUN npm prune --omit=dev --no-audit --no-fund
 
 
 FROM base AS builder
@@ -36,18 +41,17 @@ ENV NODE_ENV=production \
 RUN groupadd --system --gid 1001 nodejs \
     && useradd --system --uid 1001 --gid 1001 nextjs
 
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/static ./.next/standalone/.next/static
-COPY --from=builder /app/public ./.next/standalone/public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/bootstrap.ts ./scripts/bootstrap.ts
+COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
+COPY --chown=nextjs:nodejs docker-entrypoint.sh ./docker-entrypoint.sh
 
 RUN mkdir -p /app/uploads \
-    && chown -R nextjs:nodejs /app \
+    && chown nextjs:nodejs /app/uploads \
     && chmod 0755 /app/docker-entrypoint.sh
 
 USER nextjs
