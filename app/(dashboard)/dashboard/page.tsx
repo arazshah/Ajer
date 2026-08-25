@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { formatDateTime, formatMoney, serializeBigInt } from "@/lib/format";
 import { label } from "@/lib/labels";
@@ -16,12 +16,31 @@ import {
 } from "lucide-react";
 import { StatusChart, MonthlyChart } from "@/components/charts";
 import { DynamicPropertyMap } from "@/components/dynamic-map";
+import { buildSixMonthTrend } from "@/lib/reporting";
 export const metadata = { title: "داشبورد" };
-export default async function Dashboard() {
-  const u = await requireUser();
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const u = await requirePermission("dashboard.view");
+  const query = await searchParams;
   const now = new Date(),
     today = new Date(now.getFullYear(), now.getMonth(), now.getDate()),
     tomorrow = new Date(today.getTime() + 86400000);
+  const [
+    canCreateProperty,
+    canManageActivities,
+    canManageVisits,
+    canManageDeals,
+    canViewCommission,
+  ] = await Promise.all([
+    hasPermission(u, "properties.create"),
+    hasPermission(u, "activities.manage_all"),
+    hasPermission(u, "visits.manage_all"),
+    hasPermission(u, "deals.manage_all"),
+    hasPermission(u, "commissions.view"),
+  ]);
   const [
     active,
     applicants,
@@ -33,12 +52,15 @@ export default async function Dashboard() {
     visits,
     activities,
     groups,
+    monthlyProperties,
+    monthlyDeals,
   ] = await Promise.all([
     db.property.count({ where: { agencyId: u.agencyId, status: "ACTIVE" } }),
     db.requirement.count({ where: { agencyId: u.agencyId, status: "ACTIVE" } }),
     db.activity.count({
       where: {
         agencyId: u.agencyId,
+        ...(!canManageActivities ? { userId: u.id } : {}),
         completed: false,
         nextActionAt: { lt: now },
       },
@@ -46,13 +68,24 @@ export default async function Dashboard() {
     db.visit.count({
       where: {
         agencyId: u.agencyId,
+        ...(!canManageVisits ? { assignedAgentId: u.id } : {}),
         scheduledAt: { gte: today, lt: tomorrow },
       },
     }),
-    db.deal.count({ where: { agencyId: u.agencyId, status: "NEGOTIATION" } }),
-    db.deal.aggregate({
-      where: { agencyId: u.agencyId, status: "COMPLETED" },
-      _sum: { commissionAmount: true },
+    db.deal.count({
+      where: {
+        agencyId: u.agencyId,
+        status: "NEGOTIATION",
+        ...(!canManageDeals ? { assignedAgentId: u.id } : {}),
+      },
+    }),
+    db.dealCommission.aggregate({
+      where: {
+        deal: { agencyId: u.agencyId },
+        status: "RECEIVED",
+        ...(!canViewCommission ? { id: "__forbidden__" } : {}),
+      },
+      _sum: { receivedAmountToman: true },
     }),
     db.property.findMany({
       where: { agencyId: u.agencyId },
@@ -66,6 +99,7 @@ export default async function Dashboard() {
     db.visit.findMany({
       where: {
         agencyId: u.agencyId,
+        ...(!canManageVisits ? { assignedAgentId: u.id } : {}),
         status: "SCHEDULED",
         scheduledAt: { gte: now },
       },
@@ -74,7 +108,11 @@ export default async function Dashboard() {
       take: 4,
     }),
     db.activity.findMany({
-      where: { agencyId: u.agencyId, completed: false },
+      where: {
+        agencyId: u.agencyId,
+        completed: false,
+        ...(!canManageActivities ? { userId: u.id } : {}),
+      },
       include: { contact: true, user: true },
       orderBy: { nextActionAt: "asc" },
       take: 5,
@@ -84,7 +122,24 @@ export default async function Dashboard() {
       where: { agencyId: u.agencyId },
       _count: true,
     }),
+    db.property.findMany({
+      where: {
+        agencyId: u.agencyId,
+        createdAt: { gte: new Date(now.getTime() - 230 * 86_400_000) },
+      },
+      select: { createdAt: true },
+    }),
+    db.deal.findMany({
+      where: {
+        agencyId: u.agencyId,
+        status: "COMPLETED",
+        ...(!canManageDeals ? { assignedAgentId: u.id } : {}),
+        createdAt: { gte: new Date(now.getTime() - 230 * 86_400_000) },
+      },
+      select: { createdAt: true },
+    }),
   ]);
+  const monthlyTrend = buildSixMonthTrend(monthlyProperties, monthlyDeals, now);
   const map = serializeBigInt(
     recent.map((p) => ({
       ...p,
@@ -95,14 +150,22 @@ export default async function Dashboard() {
   );
   return (
     <>
+      {query.error === "forbidden" && (
+        <div className="toast-note mb-4 text-red-700">
+          شما اجازه دسترسی به این بخش را ندارید. در صورت نیاز با مدیر دفتر تماس
+          بگیرید.
+        </div>
+      )}
       <div className="section-head">
         <div>
           <h1 className="page-title">صبح بخیر، {u.fullName} 👋</h1>
           <p className="subtle mt-1">نبض امروز آژانس شما در یک نگاه</p>
         </div>
-        <Link className="btn btn-primary" href="/properties/new">
-          <Plus size={18} /> افزودن فایل
-        </Link>
+        {canCreateProperty && (
+          <Link className="btn btn-primary" href="/properties/new">
+            <Plus size={18} /> افزودن فایل
+          </Link>
+        )}
       </div>
       <section className="grid-auto mb-5">
         {(
@@ -112,12 +175,16 @@ export default async function Dashboard() {
             ["پیگیری عقب‌افتاده", overdue, ClockAlert, "text-red-600"],
             ["بازدید امروز", visitsToday, CalendarCheck, "text-green-600"],
             ["در حال مذاکره", negotiations, Handshake, "text-amber-600"],
-            [
-              "کمیسیون قطعی",
-              formatMoney(commission._sum.commissionAmount),
-              WalletCards,
-              "text-purple-600",
-            ],
+            ...(canViewCommission
+              ? [
+                  [
+                    "کمیسیون قطعی",
+                    formatMoney(commission._sum.receivedAmountToman),
+                    WalletCards,
+                    "text-purple-600",
+                  ] as const,
+                ]
+              : []),
           ] as const
         ).map(([t, v, I, c]) => (
           <div className="card stat" key={String(t)}>
@@ -201,19 +268,10 @@ export default async function Dashboard() {
       <section className="grid lg:grid-cols-[1.15fr_.85fr] gap-4">
         <div className="card p-5">
           <h2 className="font-black text-lg mb-4">روند شش‌ماهه</h2>
-          <MonthlyChart
-            data={[
-              { name: "فروردین", فایل: 12, معامله: 2 },
-              { name: "اردیبهشت", فایل: 18, معامله: 4 },
-              { name: "خرداد", فایل: 15, معامله: 3 },
-              { name: "تیر", فایل: 23, معامله: 6 },
-              { name: "مرداد", فایل: 19, معامله: 4 },
-              { name: "شهریور", فایل: 24, معامله: 5 },
-            ]}
-          />
+          <MonthlyChart data={monthlyTrend} />
         </div>
         <div className="card p-5">
-          <h2 className="font-black text-lg mb-4">مسیر پیشنهادی نسخه نمایشی</h2>
+          <h2 className="font-black text-lg mb-4">مسیر پیشنهادی شروع کار</h2>
           {[
             "فایل را روی نقشه پیدا کنید",
             "متقاضی را ثبت کنید",

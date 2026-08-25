@@ -23,6 +23,8 @@ export const aiPropertyCriteriaSchema = z.object({
       ]),
     )
     .default([]),
+  cities: z.array(z.string().min(1).max(80)).default([]),
+  districts: z.array(z.string().min(1).max(80)).default([]),
   neighborhoods: z.array(z.string().min(1).max(80)).default([]),
   minPrice: nullableNumber,
   maxPrice: nullableNumber,
@@ -62,6 +64,21 @@ export function scorePropertyForAiSearch(
     return null;
   if (criteria.parkingRequired && !property.parking) return null;
   if (criteria.elevatorRequired && !property.elevator) return null;
+  if (
+    criteria.cities.length &&
+    !criteria.cities.some(
+      (item) => property.city.includes(item) || item.includes(property.city),
+    )
+  )
+    return null;
+  if (
+    criteria.districts.length &&
+    !criteria.districts.some(
+      (item) =>
+        property.district.includes(item) || item.includes(property.district),
+    )
+  )
+    return null;
 
   const price = asNumber(property.priceTotal);
   const deposit = asNumber(property.depositAmount);
@@ -101,6 +118,14 @@ export function scorePropertyForAiSearch(
   if (criteria.propertyTypes.length) {
     score += 10;
     reasons.push(`نوع ملک ${label(property.propertyType)}`);
+  }
+  if (criteria.cities.length) {
+    score += 10;
+    reasons.push(`شهر ${property.city}`);
+  }
+  if (criteria.districts.length) {
+    score += 5;
+    reasons.push(`منطقه ${property.district}`);
   }
   if (criteria.neighborhoods.length) {
     const neighborhoodMatch = criteria.neighborhoods.some(
@@ -145,12 +170,13 @@ export function scorePropertyForAiSearch(
   return { score: Math.min(100, score), reasons };
 }
 
-export const aiSearchSystemPrompt = `شما مفسر جست‌وجوی فارسی سامانه املاک آجر در ارومیه هستید.
+export const aiSearchSystemPrompt = `شما مفسر جست‌وجوی فارسی سامانه املاک آجر برای شهرها و استان‌های سراسر ایران هستید.
 متن کاربر را فقط به یک شیء JSON معتبر تبدیل کنید. هیچ متن یا markdown دیگری ننویسید.
+نام شهر را در cities، منطقه شهری را در districts و نام محله را در neighborhoods قرار دهید و هیچ شهر پیش‌فرضی فرض نکنید.
 مبالغ همگی تومان هستند. عبارت «میلیارد» را در 1,000,000,000 و «میلیون» را در 1,000,000 ضرب کنید.
 برای خرید و پیش‌فروش از minPrice/maxPrice استفاده کنید. برای رهن و اجاره از maxDeposit و maxMonthlyRent استفاده کنید.
 مقادیر enum مجاز:
 transactionTypes: SALE, RENT, MORTGAGE_RENT, PRESALE
 propertyTypes: APARTMENT, HOUSE, VILLA, LAND, COMMERCIAL, OFFICE, STORE, WAREHOUSE
-کلیدهای خروجی دقیقاً: summary, transactionTypes, propertyTypes, neighborhoods, minPrice, maxPrice, maxDeposit, maxMonthlyRent, minArea, maxArea, minBedrooms, maxBedrooms, parkingRequired, elevatorRequired, keywords
+کلیدهای خروجی دقیقاً: summary, transactionTypes, propertyTypes, cities, districts, neighborhoods, minPrice, maxPrice, maxDeposit, maxMonthlyRent, minArea, maxArea, minBedrooms, maxBedrooms, parkingRequired, elevatorRequired, keywords
 برای معیارهای نامشخص آرایه خالی، false یا null بگذارید. summary یک خلاصه کوتاه فارسی از برداشت شما باشد.`;

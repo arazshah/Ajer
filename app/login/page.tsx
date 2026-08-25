@@ -2,9 +2,13 @@ import { getSessionUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
 import { MapPin, Building2, Route, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 export const metadata = { title: "ورود" };
 export default async function Login() {
   if (await getSessionUser()) redirect("/dashboard");
+  const showDemoCredentials =
+    process.env.NODE_ENV === "development" &&
+    process.env.SEED_DEMO_DATA === "true";
   return (
     <main className="min-h-screen grid lg:grid-cols-2 bg-white">
       <section className="p-7 md:p-14 flex items-center justify-center">
@@ -13,37 +17,45 @@ export default async function Login() {
             <div className="brand-mark text-white">آ</div>
             <div>
               <div className="text-2xl font-black">آجر</div>
-              <div className="subtle">سامانه نقشه‌محور مدیریت املاک</div>
+              <div className="subtle">مالک و مستأجر</div>
             </div>
           </div>
           <h1 className="text-3xl font-black mb-2">خوش آمدید</h1>
           <p className="subtle mb-7">از فایل تا قرارداد، روی نقشه</p>
           <LoginForm />
-          <div className="mt-6 p-4 rounded-2xl bg-[#f8f5f0] border border-[#e7e0d7]">
-            <b>دسترسی نسخه نمایشی</b>
-            <div className="mt-2 text-sm grid gap-1">
-              <span>
-                مدیر: <span className="ltr inline-block">admin@ajer.ir</span>
-              </span>
-              <span>
-                مشاور: <span className="ltr inline-block">agent@ajer.ir</span>
-              </span>
-              <span>
-                رمز هر دو: <code className="ltr">Ajer123!</code>
-              </span>
+          <p className="text-center mt-5">
+            هنوز حساب ندارید؟{" "}
+            <Link className="text-brick font-bold" href="/signup">
+              ۳۰ روز رایگان شروع کنید
+            </Link>
+          </p>
+          {showDemoCredentials && (
+            <div className="mt-6 p-4 rounded-2xl bg-[#f8f5f0] border border-[#e7e0d7]">
+              <b>دسترسی نسخه نمایشی</b>
+              <div className="mt-2 text-sm grid gap-1">
+                <span>
+                  مدیر: <span className="ltr inline-block">admin@ajer.ir</span>
+                </span>
+                <span>
+                  مشاور: <span className="ltr inline-block">agent@ajer.ir</span>
+                </span>
+                <span>
+                  رمز هر دو: <code className="ltr">Ajer123!</code>
+                </span>
+              </div>
+              <p className="text-center subtle text-xs mt-6">
+                طراحی و توسعه توسط{" "}
+                <a
+                  className="text-brick font-bold"
+                  href="https://araz.me"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  آراز شاه‌کرمی · araz.me
+                </a>
+              </p>
             </div>
-            <p className="text-center subtle text-xs mt-6">
-              طراحی و توسعه توسط{" "}
-              <a
-                className="text-brick font-bold"
-                href="https://araz.me"
-                target="_blank"
-                rel="noreferrer"
-              >
-                آراز شاه‌کرمی · araz.me
-              </a>
-            </p>
-          </div>
+          )}
         </div>
       </section>
       <section className="hidden lg:flex relative overflow-hidden bg-ink text-white p-14 flex-col justify-between">
@@ -56,7 +68,7 @@ export default async function Login() {
         />
         <div className="relative">
           <span className="badge bg-white/10 text-white">
-            <MapPin size={14} /> ارومیه
+            <MapPin size={14} /> سراسر ایران
           </span>
           <h2 className="text-5xl font-black leading-tight mt-7 max-w-xl">
             همه فایل‌های آژانس،

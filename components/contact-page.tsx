@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { saveContact } from "@/app/actions";
 import {
@@ -10,6 +10,8 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { formatDate } from "@/lib/format";
+import { label } from "@/lib/labels";
+import Link from "next/link";
 export async function ContactPage({
   kind,
   q,
@@ -19,8 +21,9 @@ export async function ContactPage({
   q?: string;
   duplicate?: string;
 }) {
-  const u = await requireUser(),
+  const u = await requirePermission("contacts.view"),
     type = kind === "owner" ? "OWNER" : "APPLICANT";
+  const canManage = await hasPermission(u, "contacts.manage");
   const cs = await db.contact.findMany({
     where: {
       agencyId: u.agencyId,
@@ -30,6 +33,8 @@ export async function ContactPage({
         : {}),
     },
     include: {
+      assignedAgent: true,
+      tagAssignments: { include: { tag: true } },
       _count: {
         select: { ownedProperties: true, requirements: true, activities: true },
       },
@@ -44,33 +49,54 @@ export async function ContactPage({
           <h1 className="page-title">{title}</h1>
           <p className="subtle">دفترچه یکپارچه ارتباطات آژانس</p>
         </div>
-        <details>
-          <summary className="btn btn-primary list-none cursor-pointer">
-            <Plus size={18} /> افزودن {kind === "owner" ? "مالک" : "متقاضی"}
-          </summary>
-          <form
-            action={saveContact}
-            className="card p-5 absolute left-6 mt-2 w-[340px] z-20"
-          >
-            <input type="hidden" name="kind" value={kind} />
-            <label className="label">نام و نام خانوادگی</label>
-            <input className="input mb-3" name="fullName" required />
-            <label className="label">شماره همراه</label>
-            <input
-              className="input ltr text-right mb-3"
-              name="mobile"
-              required
-              placeholder="09120000000"
-            />
-            <label className="label">یادداشت</label>
-            <textarea className="textarea mb-3" name="notes" />
-            <button className="btn btn-primary w-full">ذخیره</button>
-          </form>
-        </details>
+        {canManage && (
+          <details>
+            <summary className="btn btn-primary list-none cursor-pointer">
+              <Plus size={18} /> افزودن {kind === "owner" ? "مالک" : "متقاضی"}
+            </summary>
+            <form
+              action={saveContact}
+              className="card p-5 absolute left-6 mt-2 w-[340px] z-20"
+            >
+              <input type="hidden" name="kind" value={kind} />
+              <label className="label">نام و نام خانوادگی</label>
+              <input className="input mb-3" name="fullName" required />
+              <label className="label">شماره همراه</label>
+              <input
+                className="input ltr text-right mb-3"
+                name="mobile"
+                required
+                placeholder="09120000000"
+              />
+              <label className="label">یادداشت</label>
+              <textarea className="textarea mb-3" name="notes" />
+              <label className="label">کد ملی (اختیاری)</label>
+              <input
+                className="input ltr text-right mb-3"
+                name="nationalCode"
+                inputMode="numeric"
+              />
+              <label className="label">منبع جذب</label>
+              <select
+                className="select mb-3"
+                name="source"
+                defaultValue="OTHER"
+              >
+                <option value="OWNER">مراجعه مستقیم</option>
+                <option value="REFERRAL">معرفی</option>
+                <option value="FIELD_RESEARCH">بازاریابی میدانی</option>
+                <option value="WEBSITE">وب‌سایت</option>
+                <option value="SOCIAL_MEDIA">شبکه اجتماعی</option>
+                <option value="OTHER">سایر</option>
+              </select>
+              <button className="btn btn-primary w-full">ذخیره</button>
+            </form>
+          </details>
+        )}
       </div>
       {duplicate && (
         <div className="toast-note text-red-600 mb-4">
-          این شماره همراه قبلاً ثبت شده است.
+          شماره همراه یا کد ملی قبلاً در همین دفتر ثبت شده است.
         </div>
       )}
       <form className="card p-3 mb-4 flex gap-2">
@@ -93,7 +119,12 @@ export async function ContactPage({
                 <UserRound />
               </div>
               <div>
-                <h2 className="font-black text-lg">{c.fullName}</h2>
+                <Link
+                  href={`/contacts/${c.id}`}
+                  className="font-black text-lg hover:text-brick"
+                >
+                  {c.fullName}
+                </Link>
                 <a
                   className="ltr inline-flex items-center gap-1 text-brick"
                   href={`tel:${c.mobile}`}
@@ -120,8 +151,19 @@ export async function ContactPage({
                 <small>پیگیری</small>
               </div>
             </div>
+            <div className="flex flex-wrap gap-2 mt-4">
+              <span className="badge badge-warn">{label(c.leadStatus)}</span>
+              {c.tagAssignments.slice(0, 2).map(({ tag }) => (
+                <span className="badge" key={tag.id}>
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+            <small className="block subtle mt-3">
+              مسئول: {c.assignedAgent?.fullName || "تعیین نشده"}
+            </small>
             <p className="subtle text-xs mt-4">
-              ثبت در {formatDate(c.createdAt)} · اطلاعات ساختگی
+              ثبت در {formatDate(c.createdAt)} · مشاهده پروفایل کامل
             </p>
           </article>
         ))}

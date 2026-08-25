@@ -7,6 +7,8 @@ node_modules
 prisma/dev.db*
 public/uploads/*
 !public/uploads/.gitkeep
+storage/uploads/*
+!storage/uploads/.gitkeep
 coverage
 test-results
 *.tsbuildinfo

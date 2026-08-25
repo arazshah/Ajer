@@ -9,10 +9,20 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:operational": "tsx scripts/operational-smoke.ts",
+    "test:crm": "tsx scripts/crm-smoke.ts",
+    "test:operations": "tsx scripts/sales-operations-smoke.ts",
+    "test:accounting": "tsx scripts/accounting-smoke.ts",
+    "test:legal": "tsx scripts/legal-contract-smoke.ts",
+    "test:security": "tsx scripts/security-smoke.ts",
+    "test:integrations": "tsx scripts/integration-smoke.ts",
+    "test:warm": "tsx scripts/warm-test.ts",
     "test:watch": "vitest",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "db:dev:up": "docker-compose -f docker-compose.yaml -f docker-compose.dev.yml up -d postgres",
+    "db:dev:stop": "docker-compose -f docker-compose.yaml -f docker-compose.dev.yml stop postgres"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

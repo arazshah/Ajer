@@ -9,6 +9,8 @@ const property = {
   status: "ACTIVE",
   transactionType: "SALE",
   propertyType: "APARTMENT",
+  city: "ارومیه",
+  district: "مرکزی",
   neighborhood: "استادان",
   area: 105,
   bedrooms: 2,
@@ -54,5 +56,15 @@ describe("AI property search", () => {
         transactionTypes: ["UNKNOWN"],
       }).success,
     ).toBe(false);
+  });
+  it("keeps searches isolated to the requested Iranian city", () => {
+    const tehran = aiPropertyCriteriaSchema.parse({
+      summary: "آپارتمان در تهران",
+      cities: ["تهران"],
+    });
+    expect(scorePropertyForAiSearch(property, tehran)).toBeNull();
+    expect(
+      scorePropertyForAiSearch({ ...property, city: "تهران" }, tehran)?.reasons,
+    ).toContain("شهر تهران");
   });
 });

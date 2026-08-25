@@ -1,9 +1,9 @@
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { PropertyForm } from "@/components/property-form";
 export const metadata = { title: "افزودن فایل" };
 export default async function NewProperty() {
-  const u = await requireUser();
+  const u = await requirePermission("properties.create");
   const [owners, agents] = await Promise.all([
     db.contact.findMany({
       where: { agencyId: u.agencyId, type: { in: ["OWNER", "BOTH"] } },

@@ -9,12 +9,15 @@ const token = await new SignJWT({ userId: user.id })
   .setIssuedAt()
   .setExpirationTime("5m")
   .sign(key);
+const baseUrl = process.env.SMOKE_BASE_URL || "http://localhost:3000";
 for (const [path, expected] of [
   ["/dashboard", "نبض امروز آژانس"],
-  ["/map", "نقشه املاک ارومیه"],
+  ["/map", "نقشه املاک"],
   ["/properties", "فایل‌های ملکی"],
+  ["/billing", "اشتراک آجر"],
+  ["/help", "راهنمای آجر"],
 ]) {
-  const response = await fetch(`http://localhost:3000${path}`, {
+  const response = await fetch(`${baseUrl}${path}`, {
     headers: { cookie: `ajer_session=${token}` },
   });
   const body = await response.text();

@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { formatDate, formatMoney } from "@/lib/format";
 import { label } from "@/lib/labels";
@@ -19,7 +19,7 @@ export default async function Properties({
     page?: string;
   }>;
 }) {
-  const u = await requireUser(),
+  const u = await requirePermission("properties.view"),
     s = await searchParams,
     q = s.q?.trim(),
     page = Math.max(1, Number(s.page) || 1);
@@ -39,6 +39,12 @@ export default async function Properties({
         }
       : {}),
   };
+  const [canCreate, canManageAll, canExport, canUseAi] = await Promise.all([
+    hasPermission(u, "properties.create"),
+    hasPermission(u, "properties.manage_all"),
+    hasPermission(u, "data.export"),
+    hasPermission(u, "ai.use"),
+  ]);
   const [items, total] = await Promise.all([
     db.property.findMany({
       where,
@@ -61,15 +67,19 @@ export default async function Properties({
           <p className="subtle">{total} فایل مطابق فیلترها</p>
         </div>
         <div className="flex gap-2">
-          <Link className="btn" href="/api/export/properties">
-            خروجی CSV
-          </Link>
-          <Link className="btn btn-primary" href="/properties/new">
-            <Plus size={18} /> افزودن فایل
-          </Link>
+          {canExport && (
+            <Link className="btn" href="/api/export/properties">
+              خروجی CSV
+            </Link>
+          )}
+          {canCreate && (
+            <Link className="btn btn-primary" href="/properties/new">
+              <Plus size={18} /> افزودن فایل
+            </Link>
+          )}
         </div>
       </div>
-      <AiPropertySearch />
+      {canUseAi && <AiPropertySearch />}
       <form className="card p-3 mb-4 grid md:grid-cols-[1fr_180px_180px_auto] gap-2">
         <div className="relative">
           <Search className="absolute right-3 top-3 subtle" size={18} />
@@ -159,19 +169,28 @@ export default async function Properties({
                     >
                       <Eye size={16} />
                     </Link>
-                    <Link
-                      className="btn p-2"
-                      href={`/properties/${p.id}/edit`}
-                      aria-label="ویرایش"
-                    >
-                      <Pencil size={16} />
-                    </Link>
-                    <form action={duplicateProperty.bind(null, p.id)}>
-                      <button className="btn p-2" aria-label="کپی">
-                        <Copy size={16} />
-                      </button>
-                    </form>
-                    <ConfirmArchive action={archiveProperty.bind(null, p.id)} />
+                    {(canManageAll || p.assignedAgentId === u.id) && (
+                      <Link
+                        className="btn p-2"
+                        href={`/properties/${p.id}/edit`}
+                        aria-label="ویرایش"
+                      >
+                        <Pencil size={16} />
+                      </Link>
+                    )}
+                    {canCreate &&
+                      (canManageAll || p.assignedAgentId === u.id) && (
+                        <form action={duplicateProperty.bind(null, p.id)}>
+                          <button className="btn p-2" aria-label="کپی">
+                            <Copy size={16} />
+                          </button>
+                        </form>
+                      )}
+                    {(canManageAll || p.assignedAgentId === u.id) && (
+                      <ConfirmArchive
+                        action={archiveProperty.bind(null, p.id)}
+                      />
+                    )}
                   </div>
                 </td>
               </tr>

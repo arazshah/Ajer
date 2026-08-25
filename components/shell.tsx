@@ -20,30 +20,46 @@ import {
   Menu,
   LogOut,
   ChevronDown,
+  CircleHelp,
+  CreditCard,
+  WalletCards,
+  ListTodo,
+  ArrowLeftRight,
+  Landmark,
 } from "lucide-react";
 import { logoutAction } from "@/app/actions";
 const nav = [
-  ["/dashboard", "داشبورد", LayoutDashboard],
-  ["/map", "نقشه املاک", Map],
-  ["/properties", "فایل‌های ملکی", Building2],
-  ["/owners", "مالکان", Users],
-  ["/applicants", "متقاضیان", UserRoundSearch],
-  ["/matching", "تطبیق هوشمند", Sparkles],
-  ["/activities", "پیگیری‌ها", ClipboardCheck],
-  ["/visits", "بازدیدها", CalendarDays],
-  ["/deals", "معاملات", Handshake],
-  ["/reports", "گزارش‌ها", ChartNoAxesCombined],
-  ["/users", "کاربران", UserCog],
-  ["/settings", "تنظیمات", Settings],
+  ["/dashboard", "داشبورد", LayoutDashboard, "dashboard.view"],
+  ["/map", "نقشه املاک", Map, "properties.view"],
+  ["/properties", "فایل‌های ملکی", Building2, "properties.view"],
+  ["/owners", "مالکان", Users, "contacts.view"],
+  ["/applicants", "متقاضیان", UserRoundSearch, "contacts.view"],
+  ["/matching", "تطبیق هوشمند", Sparkles, "ai.use"],
+  ["/activities", "پیگیری‌ها", ClipboardCheck, "activities.manage"],
+  ["/visits", "بازدیدها", CalendarDays, "visits.manage"],
+  ["/tasks", "وظایف تیم", ListTodo, "activities.manage"],
+  ["/offers", "پیشنهادها و مذاکره", ArrowLeftRight, "deals.view"],
+  ["/deals", "معاملات", Handshake, "deals.view"],
+  ["/commissions", "کمیسیون و تسویه", WalletCards, "commissions.view"],
+  ["/accounting", "حسابداری دفتر", Landmark, "accounting.view"],
+  ["/reports", "گزارش‌ها", ChartNoAxesCombined, "reports.view"],
+  ["/users", "کاربران", UserCog, "users.manage"],
+  ["/billing", "اشتراک و پرداخت", CreditCard, "settings.manage"],
+  ["/help", "راهنمای آجر", CircleHelp, "dashboard.view"],
+  ["/settings", "تنظیمات", Settings, "settings.manage"],
 ] as const;
 export function Shell({
   children,
   user,
   unread,
+  access,
+  permissions,
 }: {
   children: React.ReactNode;
   user: { fullName: string; role: string };
   unread: number;
+  access: "trial" | "subscription" | "none";
+  permissions: string[];
 }) {
   const p = usePathname();
   return (
@@ -53,23 +69,25 @@ export function Shell({
           <div className="brand-mark">آ</div>
           <div>
             <div className="text-xl font-black">آجر</div>
-            <small className="text-white/50">مدیریت املاک</small>
+            <small className="text-white/50">مالک و مستأجر</small>
           </div>
         </Link>
         <nav className="flex-1 overflow-auto">
-          {nav.map(([href, title, Icon]) => (
-            <Link
-              key={href}
-              href={href}
-              className={`nav-link ${p.startsWith(href) ? "active" : ""}`}
-            >
-              <Icon size={19} />
-              <span>{title}</span>
-            </Link>
-          ))}
+          {nav
+            .filter(([, , , permission]) => permissions.includes(permission))
+            .map(([href, title, Icon]) => (
+              <Link
+                key={href}
+                href={href}
+                className={`nav-link ${p.startsWith(href) ? "active" : ""}`}
+              >
+                <Icon size={19} />
+                <span>{title}</span>
+              </Link>
+            ))}
         </nav>
         <div className="border-t border-white/10 pt-4 mt-3 text-xs text-white/45 leading-6">
-          تمام اطلاعات این نسخه نمایشی ساختگی است.
+          آجر؛ مدیریت حرفه‌ای املاک ایران
           <br />
           طراحی و توسعه:{" "}
           <a
@@ -87,14 +105,24 @@ export function Shell({
           <button className="btn p-2 mobile-menu" aria-label="فهرست">
             <Menu />
           </button>
-          <Link
-            href="/search"
-            className="top-search flex items-center gap-2 bg-[#f5f3ef] rounded-xl px-4 py-2.5 flex-1 max-w-xl text-slate-500"
+          {permissions.includes("properties.view") ? (
+            <Link
+              href="/search"
+              className="top-search flex items-center gap-2 bg-[#f5f3ef] rounded-xl px-4 py-2.5 flex-1 max-w-xl text-slate-500"
+            >
+              <Search size={18} /> جست‌وجوی فایل، مالک یا متقاضی…
+            </Link>
+          ) : (
+            <div className="flex-1" />
+          )}
+          <span
+            className={`badge hidden md:inline-flex ${access === "none" ? "badge-danger" : access === "trial" ? "badge-warn" : "badge-active"}`}
           >
-            <Search size={18} /> جست‌وجوی فایل، مالک یا متقاضی…
-          </Link>
-          <span className="badge badge-warn hidden md:inline-flex">
-            داده‌های نمایشی
+            {access === "trial"
+              ? "دوره آزمایشی"
+              : access === "subscription"
+                ? "اشتراک فعال"
+                : "نیازمند تمدید"}
           </span>
           <Link href="/properties/new" className="btn btn-primary">
             <Plus size={18} />
@@ -120,7 +148,7 @@ export function Shell({
               <div className="hidden lg:block">
                 <b className="text-sm block">{user.fullName}</b>
                 <small className="subtle">
-                  {user.role === "ADMIN" ? "مدیر سامانه" : "مشاور"}
+                  {user.role === "ADMIN" ? "مدیر دفتر" : "مشاور / بازاریاب"}
                 </small>
               </div>
               <ChevronDown size={14} />
@@ -137,8 +165,8 @@ export function Shell({
         <main className="content">
           {children}
           <footer className="text-center subtle text-xs py-8">
-            آجر؛ از فایل تا قرارداد، روی نقشه · تمام اطلاعات این نسخه نمایشی
-            ساختگی است. · ساخته‌شده توسط{" "}
+            آجر؛ مالک و مستأجر · سیستم مدیریت حرفه‌ای املاک ایران · ساخته‌شده
+            توسط{" "}
             <a
               className="text-brick font-bold"
               href="https://araz.me"

@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { scoreMatch } from "@/lib/matching";
 import { formatMoney } from "@/lib/format";
@@ -19,7 +19,7 @@ export default async function Matching({
 }: {
   searchParams: Promise<{ requirement?: string }>;
 }) {
-  const user = await requireUser(),
+  const user = await requirePermission("ai.use"),
     query = await searchParams;
   const requirements = await db.requirement.findMany({
     where: { agencyId: user.agencyId, status: "ACTIVE" },

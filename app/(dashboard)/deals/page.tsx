@@ -1,10 +1,10 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { formatMoney, formatDate } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { updateDealStatus, createDeal } from "@/app/actions";
 import Link from "next/link";
-import { Handshake, ArrowLeft } from "lucide-react";
+import { Handshake, ArrowLeft, Eye } from "lucide-react";
 const stages = [
   "NEGOTIATION",
   "AGREED",
@@ -18,11 +18,19 @@ export default async function Deals({
 }: {
   searchParams: Promise<{ property?: string }>;
 }) {
-  const u = await requireUser();
+  const u = await requirePermission("deals.view");
+  const [canManageAll, canCreate, canManage] = await Promise.all([
+    hasPermission(u, "deals.manage_all"),
+    hasPermission(u, "deals.create"),
+    hasPermission(u, "deals.manage"),
+  ]);
   const query = await searchParams;
   const [deals, properties, applicants] = await Promise.all([
     db.deal.findMany({
-      where: { agencyId: u.agencyId },
+      where: {
+        agencyId: u.agencyId,
+        ...(!canManageAll ? { assignedAgentId: u.id } : {}),
+      },
       include: {
         property: true,
         applicant: true,
@@ -47,48 +55,50 @@ export default async function Deals({
           <h1 className="page-title">خط لوله معاملات</h1>
           <p className="subtle">مدیریت مذاکره تا قرارداد نهایی</p>
         </div>
-        <details>
-          <summary className="btn btn-primary list-none cursor-pointer">
-            ایجاد معامله
-          </summary>
-          <form
-            action={createDeal}
-            className="card p-4 absolute left-6 mt-2 w-[380px] max-w-[90vw] z-30 grid gap-3"
-          >
-            <select
-              className="select"
-              name="propertyId"
-              defaultValue={query.property}
-              required
+        {canCreate && (
+          <details>
+            <summary className="btn btn-primary list-none cursor-pointer">
+              ایجاد معامله
+            </summary>
+            <form
+              action={createDeal}
+              className="card p-4 absolute left-6 mt-2 w-[380px] max-w-[90vw] z-30 grid gap-3"
             >
-              <option value="">انتخاب فایل</option>
-              {properties.map((p) => (
-                <option value={p.id} key={p.id}>
-                  {p.code} · {p.title}
-                </option>
-              ))}
-            </select>
-            <select className="select" name="applicantId" required>
-              <option value="">انتخاب متقاضی</option>
-              {applicants.map((a) => (
-                <option value={a.id} key={a.id}>
-                  {a.fullName}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input"
-              name="agreedPrice"
-              placeholder="قیمت توافقی (تومان)"
-            />
-            <textarea
-              className="textarea"
-              name="notes"
-              placeholder="یادداشت مذاکره"
-            />
-            <button className="btn btn-primary">ثبت در مذاکره</button>
-          </form>
-        </details>
+              <select
+                className="select"
+                name="propertyId"
+                defaultValue={query.property}
+                required
+              >
+                <option value="">انتخاب فایل</option>
+                {properties.map((p) => (
+                  <option value={p.id} key={p.id}>
+                    {p.code} · {p.title}
+                  </option>
+                ))}
+              </select>
+              <select className="select" name="applicantId" required>
+                <option value="">انتخاب متقاضی</option>
+                {applicants.map((a) => (
+                  <option value={a.id} key={a.id}>
+                    {a.fullName}
+                  </option>
+                ))}
+              </select>
+              <input
+                className="input"
+                name="agreedPrice"
+                placeholder="قیمت توافقی (تومان)"
+              />
+              <textarea
+                className="textarea"
+                name="notes"
+                placeholder="یادداشت مذاکره"
+              />
+              <button className="btn btn-primary">ثبت در مذاکره</button>
+            </form>
+          </details>
+        )}
       </div>
       <div className="kanban">
         {stages.map((stage, idx) => (
@@ -123,7 +133,7 @@ export default async function Deals({
                   </small>
                   <div className="flex justify-between mt-4">
                     <small>{formatDate(d.createdAt)}</small>
-                    {idx < 3 && (
+                    {idx < 3 && canManage && (
                       <form
                         action={updateDealStatus.bind(
                           null,
@@ -137,6 +147,12 @@ export default async function Deals({
                       </form>
                     )}
                   </div>
+                  <Link
+                    href={`/deals/${d.id}`}
+                    className="btn mt-3 w-full justify-center text-xs"
+                  >
+                    <Eye size={14} /> پرونده کامل معامله
+                  </Link>
                 </article>
               ))}
           </section>

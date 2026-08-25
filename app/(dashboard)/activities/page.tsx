@@ -1,8 +1,9 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { toggleActivity, createActivity } from "@/app/actions";
+import { JalaliDateInput } from "@/components/jalali-date-input";
 import {
   CheckCircle2,
   Circle,
@@ -16,12 +17,14 @@ export default async function Activities({
 }: {
   searchParams: Promise<{ tab?: string; property?: string }>;
 }) {
-  const u = await requireUser(),
+  const u = await requirePermission("activities.manage"),
     s = await searchParams,
     now = new Date();
+  const canManageAll = await hasPermission(u, "activities.manage_all");
   const tab = s.tab ?? "today";
   const where = {
     agencyId: u.agencyId,
+    ...(!canManageAll ? { userId: u.id } : {}),
     ...(tab === "completed"
       ? { completed: true }
       : tab === "overdue"
@@ -91,12 +94,7 @@ export default async function Activities({
                 </option>
               ))}
             </select>
-            <input
-              className="input ltr"
-              type="datetime-local"
-              name="nextActionAt"
-              required
-            />
+            <JalaliDateInput name="nextActionAt" includeTime required />
             <button className="btn btn-primary">ذخیره پیگیری</button>
           </form>
         </details>

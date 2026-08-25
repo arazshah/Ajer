@@ -1,10 +1,10 @@
-import { requireAdmin } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { saveSetting } from "@/app/actions";
 import { Save, MapPin, Building2 } from "lucide-react";
 export const metadata = { title: "تنظیمات" };
 export default async function Settings() {
-  const u = await requireAdmin();
+  const u = await requirePermission("settings.manage");
   const settings = Object.fromEntries(
     (await db.appSetting.findMany({ where: { agencyId: u.agencyId } })).map(
       (x) => [x.key, x.value],

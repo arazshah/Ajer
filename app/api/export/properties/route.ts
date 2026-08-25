@@ -1,9 +1,9 @@
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { csvSafe, formatDate } from "@/lib/format";
 import { label } from "@/lib/labels";
 export async function GET() {
-  const user = await requireUser();
+  const user = await requirePermission("data.export");
   const properties = await db.property.findMany({
     where: { agencyId: user.agencyId },
     include: { owner: true, assignedAgent: true },

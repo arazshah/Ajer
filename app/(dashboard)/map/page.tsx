@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { serializeBigInt, formatMoney } from "@/lib/format";
 import { label } from "@/lib/labels";
@@ -17,7 +17,7 @@ export default async function MapPage({
     neighborhood?: string;
   }>;
 }) {
-  const u = await requireUser(),
+  const u = await requirePermission("properties.view"),
     s = await searchParams;
   const where = {
     agencyId: u.agencyId,
@@ -59,7 +59,7 @@ export default async function MapPage({
     <>
       <div className="section-head">
         <div>
-          <h1 className="page-title">نقشه املاک ارومیه</h1>
+          <h1 className="page-title">نقشه املاک {u.agency.city}</h1>
           <p className="subtle">{ps.length} فایل در محدوده نمایش</p>
         </div>
         <span className="badge badge-warn">

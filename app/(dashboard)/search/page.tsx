@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import Link from "next/link";
 import { Search, Building2, Users, ClipboardList } from "lucide-react";
@@ -8,8 +8,12 @@ export default async function GlobalSearch({
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
-  const u = await requireUser(),
+  const u = await requirePermission("properties.view"),
     q = (await searchParams).q?.trim() ?? "";
+  const [canViewContacts, canViewRequirements] = await Promise.all([
+    hasPermission(u, "contacts.view"),
+    hasPermission(u, "requirements.manage"),
+  ]);
   const [ps, cs, rs] = q
     ? await Promise.all([
         db.property.findMany({
@@ -24,18 +28,25 @@ export default async function GlobalSearch({
           },
           take: 8,
         }),
-        db.contact.findMany({
-          where: {
-            agencyId: u.agencyId,
-            OR: [{ fullName: { contains: q } }, { mobile: { contains: q } }],
-          },
-          take: 8,
-        }),
-        db.requirement.findMany({
-          where: { agencyId: u.agencyId, title: { contains: q } },
-          include: { applicant: true },
-          take: 8,
-        }),
+        canViewContacts
+          ? db.contact.findMany({
+              where: {
+                agencyId: u.agencyId,
+                OR: [
+                  { fullName: { contains: q } },
+                  { mobile: { contains: q } },
+                ],
+              },
+              take: 8,
+            })
+          : Promise.resolve([]),
+        canViewRequirements
+          ? db.requirement.findMany({
+              where: { agencyId: u.agencyId, title: { contains: q } },
+              include: { applicant: true },
+              take: 8,
+            })
+          : Promise.resolve([]),
       ])
     : [[], [], []];
   return (
@@ -77,12 +88,16 @@ export default async function GlobalSearch({
               <Users /> مخاطبان
             </h2>
             {cs.map((c) => (
-              <div className="p-3 border-b" key={c.id}>
+              <Link
+                href={`/contacts/${c.id}`}
+                className="block p-3 border-b hover:text-brick"
+                key={c.id}
+              >
                 <b>{c.fullName}</b>
                 <small className="block subtle ltr text-right">
                   {c.mobile}
                 </small>
-              </div>
+              </Link>
             ))}
           </section>
           <section className="card p-4">

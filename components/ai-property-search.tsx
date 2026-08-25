@@ -75,7 +75,7 @@ export function AiPropertySearch() {
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-black">جست‌وجوی هوشمند فایل</h2>
               <span className="badge badge-warn">
-                <Bot size={13} /> با AvalAI
+                <Bot size={13} /> دستیار هوشمند آجر
               </span>
             </div>
             <p className="subtle mt-1">

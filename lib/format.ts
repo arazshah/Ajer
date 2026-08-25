@@ -1,3 +1,5 @@
+import { formatJalaliDate, formatJalaliDateTime } from "@/lib/jalali";
+
 const fa = new Intl.NumberFormat("fa-IR");
 export const toPersianDigits = (value: string | number) =>
   String(value).replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
@@ -20,19 +22,10 @@ export function normalizeMobile(value: string) {
   return v;
 }
 export function formatDate(value: Date | string) {
-  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
+  return formatJalaliDate(value);
 }
 export function formatDateTime(value: Date | string) {
-  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatJalaliDateTime(value);
 }
 export function serializeBigInt<T>(data: T): T {
   return JSON.parse(

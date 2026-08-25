@@ -1,12 +1,21 @@
 import { z } from "zod";
-import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   aiPropertyCriteriaSchema,
   aiSearchSystemPrompt,
   scorePropertyForAiSearch,
 } from "@/lib/ai-property-search";
+import { getSessionUser } from "@/lib/auth";
+import { getAgencyEntitlement } from "@/lib/entitlements";
 import { serializeBigInt } from "@/lib/format";
+import {
+  recordIntegrationFailure,
+  recordIntegrationSuccess,
+} from "@/lib/integrations";
+import { hasPermission } from "@/lib/permissions";
+import { getPlatformSettings } from "@/lib/platform-settings";
+import { fetchJsonWithPolicy, ProviderHttpError } from "@/lib/provider-http";
+import { consumeRateLimit } from "@/lib/security";
 
 const requestSchema = z.object({
   query: z
@@ -23,71 +32,135 @@ function cleanJson(content: string) {
     .trim();
 }
 
+function jsonError(
+  error: string,
+  status: number,
+  extraHeaders?: Record<string, string>,
+) {
+  return Response.json(
+    { error },
+    { status, headers: { "Cache-Control": "no-store", ...extraHeaders } },
+  );
+}
+
 export async function POST(request: Request) {
+  const user = await getSessionUser();
+  if (!user) return jsonError("برای ادامه وارد حساب خود شوید.", 401);
+  if (!(await hasPermission(user, "ai.use")))
+    return jsonError("اجازه استفاده از جست‌وجوی هوشمند را ندارید.", 403);
+  const entitlement = await getAgencyEntitlement(user.agencyId);
+  if (!entitlement.active)
+    return jsonError("اشتراک دفتر فعال نیست.", 402);
+  if (!entitlement.aiEnabled)
+    return jsonError("افزونه هوش مصنوعی برای اشتراک این دفتر فعال نیست.", 402);
+  if (!request.headers.get("content-type")?.includes("application/json"))
+    return jsonError("نوع محتوای درخواست باید JSON باشد.", 415);
+
+  let body: unknown;
   try {
-    const user = await requireUser();
-    const input = requestSchema.safeParse(await request.json());
-    if (!input.success)
-      return Response.json(
-        { error: input.error.issues[0]?.message ?? "درخواست نامعتبر است." },
-        { status: 400 },
+    body = await request.json();
+  } catch {
+    return jsonError("بدنه JSON معتبر نیست.", 400);
+  }
+  const input = requestSchema.safeParse(body);
+  if (!input.success)
+    return jsonError(
+      input.error.issues[0]?.message ?? "درخواست نامعتبر است.",
+      400,
+    );
+
+  const rateLimit = await consumeRateLimit({
+    scope: "api:ai-search",
+    key: `${user.agencyId}:${user.id}`,
+    limit: 20,
+    windowMs: 10 * 60_000,
+  });
+  if (!rateLimit.allowed)
+    return jsonError(
+      "تعداد جست‌وجوهای هوشمند بیش از حد مجاز است؛ کمی بعد تلاش کنید.",
+      429,
+      { "Retry-After": String(rateLimit.retryAfterSeconds) },
+    );
+
+  const context = { agencyId: user.agencyId, userId: user.id };
+  let providerCompleted = false;
+  try {
+    const { ai } = await getPlatformSettings();
+    if (!ai.enabled)
+      return jsonError(
+        "جست‌وجوی هوشمند موقتاً توسط مدیر سامانه غیرفعال شده است.",
+        503,
       );
-    const apiKey = process.env.AVALAI_API_KEY;
-    if (!apiKey)
-      return Response.json(
-        {
-          error:
-            "کلید AvalAI روی سرور تنظیم نشده است. مدیر سامانه باید AVALAI_API_KEY را تعریف کند.",
+    if (!ai.apiKey)
+      return jsonError(
+        "سرویس هوش مصنوعی روی سرور تنظیم نشده است. با مدیر سامانه تماس بگیرید.",
+        503,
+      );
+    const result = await fetchJsonWithPolicy<{
+      choices?: Array<{ message?: { content?: string } }>;
+    }>({
+      provider: "AI",
+      url: `${ai.baseUrl.replace(/\/$/, "")}/chat/completions`,
+      init: {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ai.apiKey}`,
+          "Content-Type": "application/json",
         },
-        { status: 503 },
-      );
-    const baseUrl = (
-      process.env.AVALAI_BASE_URL || "https://api.avalai.ir/v1"
-    ).replace(/\/$/, "");
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+        body: JSON.stringify({
+          model: ai.model,
+          temperature: 0,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: aiSearchSystemPrompt },
+            { role: "user", content: input.data.query },
+          ],
+        }),
       },
-      body: JSON.stringify({
-        model: process.env.AVALAI_MODEL || "gpt-5.4-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: aiSearchSystemPrompt },
-          { role: "user", content: input.data.query },
-        ],
-      }),
-      signal: AbortSignal.timeout(25_000),
-      cache: "no-store",
+      timeoutMs: 25_000,
+      maxAttempts: 2,
     });
-    if (!response.ok) {
-      console.error(
-        "AvalAI request failed",
-        response.status,
-        await response.text(),
-      );
-      return Response.json(
+    const content = result.data.choices?.[0]?.message?.content;
+    if (!content) {
+      const error = new ProviderHttpError(
+        "AI response did not contain content.",
+        "empty-content",
+        false,
         {
-          error:
-            "ارتباط با سرویس هوش مصنوعی برقرار نشد. تنظیمات AvalAI را بررسی کنید.",
+          provider: "AI",
+          statusCode: result.statusCode,
+          attempts: result.attempts,
+          latencyMs: result.latencyMs,
+          requestId: result.requestId,
         },
-        { status: 502 },
+      );
+      await recordIntegrationFailure("AI", "property-search", error, context);
+      return jsonError("پاسخ قابل استفاده‌ای از هوش مصنوعی دریافت نشد.", 502);
+    }
+    let criteria: z.infer<typeof aiPropertyCriteriaSchema>;
+    try {
+      criteria = aiPropertyCriteriaSchema.parse(JSON.parse(cleanJson(content)));
+    } catch {
+      const error = new ProviderHttpError(
+        "AI returned invalid criteria.",
+        "invalid-payload",
+        false,
+        {
+          provider: "AI",
+          statusCode: result.statusCode,
+          attempts: result.attempts,
+          latencyMs: result.latencyMs,
+          requestId: result.requestId,
+        },
+      );
+      await recordIntegrationFailure("AI", "property-search", error, context);
+      return jsonError(
+        "هوش مصنوعی پاسخ نامعتبر داد؛ لطفاً عبارت را ساده‌تر بنویسید.",
+        502,
       );
     }
-    const completion = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const content = completion.choices?.[0]?.message?.content;
-    if (!content)
-      return Response.json(
-        { error: "پاسخ قابل استفاده‌ای از هوش مصنوعی دریافت نشد." },
-        { status: 502 },
-      );
-    const criteria = aiPropertyCriteriaSchema.parse(
-      JSON.parse(cleanJson(content)),
-    );
+    await recordIntegrationSuccess("AI", "property-search", result, context);
+    providerCompleted = true;
     const properties = await db.property.findMany({
       where: {
         agencyId: user.agencyId,
@@ -129,24 +202,29 @@ export async function POST(request: Request) {
         score: match.score,
         reasons: match.reasons,
       }));
-    return Response.json(serializeBigInt({ criteria, results }));
+    return Response.json(serializeBigInt({ criteria, results }), {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-RateLimit-Remaining": String(rateLimit.remaining),
+      },
+    });
   } catch (error) {
-    if (error instanceof z.ZodError)
-      return Response.json(
-        {
-          error: "هوش مصنوعی پاسخ نامعتبر داد؛ لطفاً عبارت را ساده‌تر بنویسید.",
-        },
-        { status: 502 },
+    if (!providerCompleted)
+      await recordIntegrationFailure("AI", "property-search", error, context);
+    console.error(
+      "AI property search failed",
+      error instanceof ProviderHttpError ? error.code : "unexpected-error",
+    );
+    if (error instanceof ProviderHttpError && error.code === "timeout")
+      return jsonError(
+        "زمان پاسخ هوش مصنوعی بیش از حد طولانی شد؛ دوباره تلاش کنید.",
+        504,
       );
-    if (error instanceof Error && error.name === "TimeoutError")
-      return Response.json(
-        { error: "زمان پاسخ AvalAI بیش از حد طولانی شد؛ دوباره تلاش کنید." },
-        { status: 504 },
-      );
-    console.error("AI property search error", error);
-    return Response.json(
-      { error: "جست‌وجوی هوشمند انجام نشد. دوباره تلاش کنید." },
-      { status: 500 },
+    return jsonError(
+      error instanceof ProviderHttpError
+        ? "ارتباط با سرویس هوش مصنوعی برقرار نشد؛ دوباره تلاش کنید."
+        : "جست‌وجوی هوشمند انجام نشد. دوباره تلاش کنید.",
+      error instanceof ProviderHttpError ? 502 : 500,
     );
   }
 }

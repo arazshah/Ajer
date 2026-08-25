@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { db } from "@/lib/db";
 import { notFound } from "next/navigation";
 import { PropertyForm } from "@/components/property-form";
@@ -7,10 +7,17 @@ export default async function Edit({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const u = await requireUser(),
+  const u = await requirePermission("properties.view"),
     { id } = await params;
+  const canManageAll = await hasPermission(u, "properties.manage_all");
   const [p, owners, agents] = await Promise.all([
-    db.property.findFirst({ where: { id, agencyId: u.agencyId } }),
+    db.property.findFirst({
+      where: {
+        id,
+        agencyId: u.agencyId,
+        ...(!canManageAll ? { assignedAgentId: u.id } : {}),
+      },
+    }),
     db.contact.findMany({
       where: { agencyId: u.agencyId, type: { in: ["OWNER", "BOTH"] } },
       select: { id: true, fullName: true },
