@@ -1,47 +1,74 @@
-import { hasPermission, requirePermission } from "@/lib/permissions";
-import { db } from "@/lib/db";
-import { formatDate, formatDateTime, formatMoney, serializeBigInt } from "@/lib/format";
-import { label } from "@/lib/labels";
+import Image from "next/image";
 import Link from "next/link";
 import {
-  Building2,
-  Users,
-  ClockAlert,
-  CalendarCheck,
-  Handshake,
-  WalletCards,
-  Plus,
-  Phone,
   ArrowLeft,
+  ArrowUpLeft,
+  Bot,
+  Building2,
+  CalendarCheck,
+  ChartNoAxesCombined,
+  CheckCircle2,
+  Clock3,
+  ClockAlert,
+  Handshake,
+  MapPinned,
+  Phone,
+  Plus,
+  Sparkles,
+  UserPlus,
+  Users,
+  WalletCards,
 } from "lucide-react";
-import { StatusChart, MonthlyChart } from "@/components/charts";
 import { DynamicPropertyMap } from "@/components/dynamic-map";
-import { buildSixMonthTrend } from "@/lib/reporting";
+import { MonthlyChart, StatusChart } from "@/components/charts";
+import { db } from "@/lib/db";
+import {
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  serializeBigInt,
+} from "@/lib/format";
+import { label } from "@/lib/labels";
+import { hasPermission, requirePermission } from "@/lib/permissions";
 import { propertyCoverUrl } from "@/lib/property-media";
+import { buildSixMonthTrend } from "@/lib/reporting";
+
 export const metadata = { title: "داشبورد" };
+
+function greeting(hour: number) {
+  if (hour < 12) return "صبح بخیر";
+  if (hour < 17) return "روز بخیر";
+  return "عصر بخیر";
+}
+
 export default async function Dashboard({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const u = await requirePermission("dashboard.view");
+  const user = await requirePermission("dashboard.view");
   const query = await searchParams;
-  const now = new Date(),
-    today = new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-    tomorrow = new Date(today.getTime() + 86400000);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today.getTime() + 86_400_000);
   const [
     canCreateProperty,
+    canManageContacts,
     canManageActivities,
     canManageVisits,
     canManageDeals,
     canViewCommission,
+    canUseAi,
   ] = await Promise.all([
-    hasPermission(u, "properties.create"),
-    hasPermission(u, "activities.manage_all"),
-    hasPermission(u, "visits.manage_all"),
-    hasPermission(u, "deals.manage_all"),
-    hasPermission(u, "commissions.view"),
+    hasPermission(user, "properties.create"),
+    hasPermission(user, "contacts.manage"),
+    hasPermission(user, "activities.manage_all"),
+    hasPermission(user, "visits.manage_all"),
+    hasPermission(user, "deals.manage_all"),
+    hasPermission(user, "commissions.view"),
+    hasPermission(user, "ai.use"),
   ]);
+
   const [
     active,
     applicants,
@@ -50,63 +77,87 @@ export default async function Dashboard({
     negotiations,
     commission,
     recent,
+    mapProperties,
     visits,
     activities,
     groups,
     monthlyProperties,
     monthlyDeals,
   ] = await Promise.all([
-    db.property.count({ where: { agencyId: u.agencyId, status: "ACTIVE" } }),
-    db.requirement.count({ where: { agencyId: u.agencyId, status: "ACTIVE" } }),
+    db.property.count({ where: { agencyId: user.agencyId, status: "ACTIVE" } }),
+    db.requirement.count({
+      where: { agencyId: user.agencyId, status: "ACTIVE" },
+    }),
     db.activity.count({
       where: {
-        agencyId: u.agencyId,
-        ...(!canManageActivities ? { userId: u.id } : {}),
+        agencyId: user.agencyId,
+        ...(!canManageActivities ? { userId: user.id } : {}),
         completed: false,
         nextActionAt: { lt: now },
       },
     }),
     db.visit.count({
       where: {
-        agencyId: u.agencyId,
-        ...(!canManageVisits ? { assignedAgentId: u.id } : {}),
+        agencyId: user.agencyId,
+        ...(!canManageVisits ? { assignedAgentId: user.id } : {}),
         scheduledAt: { gte: today, lt: tomorrow },
+        status: { in: ["SCHEDULED", "CONFIRMED", "IN_PROGRESS"] },
       },
     }),
     db.deal.count({
       where: {
-        agencyId: u.agencyId,
+        agencyId: user.agencyId,
         status: "NEGOTIATION",
-        ...(!canManageDeals ? { assignedAgentId: u.id } : {}),
+        ...(!canManageDeals ? { assignedAgentId: user.id } : {}),
       },
     }),
     db.dealCommission.aggregate({
       where: {
-        deal: { agencyId: u.agencyId },
+        deal: { agencyId: user.agencyId },
         status: "RECEIVED",
         ...(!canViewCommission ? { id: "__forbidden__" } : {}),
       },
       _sum: { receivedAmountToman: true },
     }),
     db.property.findMany({
-      where: { agencyId: u.agencyId },
+      where: { agencyId: user.agencyId },
       include: {
         assignedAgent: true,
         images: { where: { isCover: true }, take: 1 },
         media: {
-          where: { isCover: true, asset: { mimeType: { startsWith: "image/" } } },
+          where: {
+            isCover: true,
+            asset: { mimeType: { startsWith: "image/" } },
+          },
           include: { asset: { select: { mimeType: true } } },
           take: 1,
         },
       },
       orderBy: { createdAt: "desc" },
-      take: 5,
+      take: 4,
+    }),
+    db.property.findMany({
+      where: { agencyId: user.agencyId, status: "ACTIVE" },
+      include: {
+        assignedAgent: true,
+        images: { where: { isCover: true }, take: 1 },
+        media: {
+          where: {
+            isCover: true,
+            asset: { mimeType: { startsWith: "image/" } },
+          },
+          include: { asset: { select: { mimeType: true } } },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 80,
     }),
     db.visit.findMany({
       where: {
-        agencyId: u.agencyId,
-        ...(!canManageVisits ? { assignedAgentId: u.id } : {}),
-        status: "SCHEDULED",
+        agencyId: user.agencyId,
+        ...(!canManageVisits ? { assignedAgentId: user.id } : {}),
+        status: { in: ["SCHEDULED", "CONFIRMED"] },
         scheduledAt: { gte: now },
       },
       include: { property: true, applicant: true },
@@ -115,9 +166,10 @@ export default async function Dashboard({
     }),
     db.activity.findMany({
       where: {
-        agencyId: u.agencyId,
+        agencyId: user.agencyId,
         completed: false,
-        ...(!canManageActivities ? { userId: u.id } : {}),
+        nextActionAt: { not: null },
+        ...(!canManageActivities ? { userId: user.id } : {}),
       },
       include: { contact: true, user: true },
       orderBy: { nextActionAt: "asc" },
@@ -125,176 +177,417 @@ export default async function Dashboard({
     }),
     db.property.groupBy({
       by: ["status"],
-      where: { agencyId: u.agencyId },
+      where: { agencyId: user.agencyId },
       _count: true,
     }),
     db.property.findMany({
       where: {
-        agencyId: u.agencyId,
+        agencyId: user.agencyId,
         createdAt: { gte: new Date(now.getTime() - 230 * 86_400_000) },
       },
       select: { createdAt: true },
     }),
     db.deal.findMany({
       where: {
-        agencyId: u.agencyId,
+        agencyId: user.agencyId,
         status: "COMPLETED",
-        ...(!canManageDeals ? { assignedAgentId: u.id } : {}),
+        ...(!canManageDeals ? { assignedAgentId: user.id } : {}),
         createdAt: { gte: new Date(now.getTime() - 230 * 86_400_000) },
       },
       select: { createdAt: true },
     }),
   ]);
+
   const monthlyTrend = buildSixMonthTrend(monthlyProperties, monthlyDeals, now);
   const map = serializeBigInt(
-    recent.map((p) => ({
-      ...p,
-      priceTotal: p.priceTotal?.toString(),
-      depositAmount: p.depositAmount?.toString(),
-      monthlyRent: p.monthlyRent?.toString(),
-      imageUrl: propertyCoverUrl(p),
+    mapProperties.map((property) => ({
+      ...property,
+      priceTotal: property.priceTotal?.toString(),
+      depositAmount: property.depositAmount?.toString(),
+      monthlyRent: property.monthlyRent?.toString(),
+      imageUrl: propertyCoverUrl(property),
     })),
   );
+  const quickActions = [
+    canCreateProperty && [
+      "/properties/new",
+      "ثبت فایل جدید",
+      "ملک تازه را وارد کنید",
+      Plus,
+      "brick",
+    ],
+    canManageContacts && [
+      "/applicants",
+      "ثبت متقاضی",
+      "نیاز خرید یا اجاره",
+      UserPlus,
+      "blue",
+    ],
+    ["/activities", "ثبت پیگیری", "تماس و اقدام بعدی", Phone, "green"],
+    canUseAi && [
+      "/matching",
+      "تطبیق هوشمند",
+      "ملک مناسب را پیدا کنید",
+      Sparkles,
+      "purple",
+    ],
+  ].filter(Boolean) as Array<[string, string, string, typeof Plus, string]>;
+
   return (
-    <>
+    <div className="dashboard-home">
       {query.error === "forbidden" && (
         <div className="toast-note mb-4 text-red-700">
           شما اجازه دسترسی به این بخش را ندارید. در صورت نیاز با مدیر دفتر تماس
           بگیرید.
         </div>
       )}
-      <div className="section-head">
-        <div>
-          <h1 className="page-title">صبح بخیر، {u.fullName} 👋</h1>
-          <p className="subtle mt-1">نبض امروز آژانس شما در یک نگاه</p>
-        </div>
-        {canCreateProperty && (
-          <Link className="btn btn-primary" href="/properties/new">
-            <Plus size={18} /> افزودن فایل
-          </Link>
-        )}
-      </div>
-      <section className="grid-auto mb-5">
-        {(
-          [
-            ["فایل فعال", active, Building2, "text-[#c65d35]"],
-            ["متقاضی فعال", applicants, Users, "text-blue-600"],
-            ["پیگیری عقب‌افتاده", overdue, ClockAlert, "text-red-600"],
-            ["بازدید امروز", visitsToday, CalendarCheck, "text-green-600"],
-            ["در حال مذاکره", negotiations, Handshake, "text-amber-600"],
-            ...(canViewCommission
-              ? [
-                  [
-                    "کمیسیون قطعی",
-                    formatMoney(commission._sum.receivedAmountToman),
-                    WalletCards,
-                    "text-purple-600",
-                  ] as const,
-                ]
-              : []),
-          ] as const
-        ).map(([t, v, I, c]) => (
-          <div className="card stat" key={String(t)}>
-            <div className="flex justify-between subtle">
-              <span>{String(t)}</span>
-              <I className={String(c)} size={20} />
-            </div>
-            <strong
-              className={String(v).includes("تومان") ? "text-lg mt-4" : ""}
-            >
-              {String(v)}
-            </strong>
-          </div>
-        ))}
-      </section>
-      <section className="grid lg:grid-cols-[1.25fr_.75fr] gap-4 mb-5">
-        <div className="card p-5">
-          <div className="section-head">
-            <h2 className="font-black text-lg">فایل‌های فعال روی نقشه</h2>
-            <Link href="/map" className="text-brick font-bold">
-              نقشه کامل <ArrowLeft className="inline" size={15} />
+
+      <section className="dashboard-welcome">
+        <div className="dashboard-welcome-copy">
+          <span className="dashboard-eyebrow">
+            <span className="size-2 rounded-full bg-emerald-400" />
+            {formatDate(today)} · {user.agency.name}
+          </span>
+          <h1>
+            {greeting(now.getHours())}، <span>{user.fullName}</span>
+          </h1>
+          <p>
+            امروز {visitsToday.toLocaleString("fa-IR")} بازدید و{" "}
+            {overdue.toLocaleString("fa-IR")} پیگیری عقب‌افتاده دارید. مهم‌ترین
+            کارها همین‌جا آماده‌اند.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {canCreateProperty && (
+              <Link
+                className="btn dashboard-primary-action"
+                href="/properties/new"
+              >
+                <Plus size={18} /> افزودن فایل جدید
+              </Link>
+            )}
+            <Link className="btn dashboard-ghost-action" href="/activities">
+              برنامه امروز <ArrowLeft size={17} />
             </Link>
           </div>
-          <DynamicPropertyMap properties={map} compact />
         </div>
-        <div className="card p-5">
-          <h2 className="font-black text-lg mb-2">وضعیت فایل‌ها</h2>
+        <div className="dashboard-focus-card">
+          <div className="flex items-center justify-between">
+            <span className="text-white/65">تمرکز امروز</span>
+            <Clock3 size={20} />
+          </div>
+          <strong>{(overdue + visitsToday).toLocaleString("fa-IR")}</strong>
+          <span>اقدام زمان‌دار</span>
+          <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-white/15">
+            <div className="h-full w-2/3 rounded-full bg-gradient-to-l from-orange-400 to-amber-200" />
+          </div>
+          <small>اول پیگیری‌های عقب‌افتاده را جمع‌بندی کنید.</small>
+        </div>
+      </section>
+
+      <section className="dashboard-quick-actions" aria-label="عملیات سریع">
+        {quickActions.map(([href, title, description, Icon, tone]) => (
+          <Link href={href} className="dashboard-action" key={href}>
+            <span className={`dashboard-action-icon ${tone}`}>
+              <Icon size={20} />
+            </span>
+            <span>
+              <b>{title}</b>
+              <small>{description}</small>
+            </span>
+            <ArrowUpLeft className="dashboard-action-arrow" size={17} />
+          </Link>
+        ))}
+      </section>
+
+      <section className="dashboard-metrics">
+        {(
+          [
+            [
+              "فایل فعال",
+              active,
+              "موجودی قابل ارائه",
+              Building2,
+              "brick",
+              "/properties",
+            ],
+            [
+              "متقاضی فعال",
+              applicants,
+              "در انتظار پیشنهاد",
+              Users,
+              "blue",
+              "/applicants",
+            ],
+            [
+              "پیگیری عقب‌افتاده",
+              overdue,
+              overdue ? "نیازمند اقدام فوری" : "همه پیگیری‌ها به‌روز",
+              ClockAlert,
+              overdue ? "red" : "green",
+              "/activities",
+            ],
+            [
+              "بازدید امروز",
+              visitsToday,
+              "برنامه امروز دفتر",
+              CalendarCheck,
+              "green",
+              "/visits",
+            ],
+            [
+              "در حال مذاکره",
+              negotiations,
+              "فرصت نزدیک به معامله",
+              Handshake,
+              "amber",
+              "/deals",
+            ],
+          ] as const
+        ).map(([title, value, description, Icon, tone, href]) => (
+          <Link className="dashboard-metric" href={href} key={title}>
+            <span className={`dashboard-metric-icon ${tone}`}>
+              <Icon size={21} />
+            </span>
+            <div>
+              <small>{title}</small>
+              <strong>{value.toLocaleString("fa-IR")}</strong>
+              <span>{description}</span>
+            </div>
+          </Link>
+        ))}
+      </section>
+
+      <section className="dashboard-workspace">
+        <div className="card dashboard-panel dashboard-today">
+          <div className="dashboard-panel-head">
+            <div>
+              <span className="panel-kicker">میز کار من</span>
+              <h2>برنامه و پیگیری‌ها</h2>
+            </div>
+            <Link href="/activities">
+              مشاهده همه <ArrowLeft size={15} />
+            </Link>
+          </div>
+          <div className="dashboard-agenda">
+            {activities.map((activity) => {
+              const late = Boolean(
+                activity.nextActionAt && activity.nextActionAt < now,
+              );
+              return (
+                <Link
+                  href="/activities"
+                  className="dashboard-agenda-row"
+                  key={activity.id}
+                >
+                  <span
+                    className={`agenda-status ${late ? "late" : "upcoming"}`}
+                  >
+                    <Phone size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <b className="truncate">{activity.subject}</b>
+                    <small>
+                      {activity.contact?.fullName || "بدون مخاطب"} ·{" "}
+                      {activity.user.fullName}
+                    </small>
+                  </span>
+                  <span className={late ? "text-red-600" : "subtle"}>
+                    {activity.nextActionAt
+                      ? formatDateTime(activity.nextActionAt)
+                      : "—"}
+                  </span>
+                </Link>
+              );
+            })}
+            {!activities.length && (
+              <div className="dashboard-mini-empty">
+                <CheckCircle2 />
+                <b>پیگیری بازی ندارید</b>
+                <span>برنامه شما مرتب و به‌روز است.</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card dashboard-panel dashboard-visits">
+          <div className="dashboard-panel-head">
+            <div>
+              <span className="panel-kicker">تقویم کاری</span>
+              <h2>بازدیدهای پیش‌رو</h2>
+            </div>
+            <Link href="/visits">
+              همه بازدیدها <ArrowLeft size={15} />
+            </Link>
+          </div>
+          <div className="grid gap-2">
+            {visits.map((visit) => (
+              <Link
+                href="/visits"
+                className="dashboard-visit-row"
+                key={visit.id}
+              >
+                <span className="dashboard-visit-date">
+                  <b>
+                    {new Intl.DateTimeFormat("fa-IR", {
+                      day: "numeric",
+                    }).format(visit.scheduledAt)}
+                  </b>
+                  <small>
+                    {new Intl.DateTimeFormat("fa-IR", {
+                      month: "short",
+                    }).format(visit.scheduledAt)}
+                  </small>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="truncate">{visit.property.title}</b>
+                  <small>{visit.applicant.fullName}</small>
+                </span>
+                <span className="badge badge-active">
+                  {formatDateTime(visit.scheduledAt)}
+                </span>
+              </Link>
+            ))}
+            {!visits.length && (
+              <div className="dashboard-mini-empty">
+                <CalendarCheck />
+                <b>بازدیدی در پیش نیست</b>
+                <span>از بخش بازدیدها یک برنامه تازه ثبت کنید.</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard-section">
+        <div className="dashboard-section-head">
+          <div>
+            <span className="panel-kicker">تازه‌های دفتر</span>
+            <h2>آخرین فایل‌های ملکی</h2>
+            <p>فایل‌های تازه ثبت یا به‌روزرسانی‌شده برای ارائه سریع</p>
+          </div>
+          <Link className="btn" href="/properties">
+            مشاهده همه فایل‌ها <ArrowLeft size={16} />
+          </Link>
+        </div>
+        <div className="dashboard-properties">
+          {recent.map((property) => (
+            <Link
+              href={`/properties/${property.id}`}
+              className="dashboard-property-card"
+              key={property.id}
+            >
+              <div className="dashboard-property-image">
+                <Image
+                  src={propertyCoverUrl(property)}
+                  alt={property.title}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 25vw"
+                  unoptimized
+                />
+                <span className="dashboard-property-code">{property.code}</span>
+                <span className="dashboard-property-type">
+                  {label(property.transactionType)}
+                </span>
+              </div>
+              <div className="p-4">
+                <h3>{property.title}</h3>
+                <p>
+                  <MapPinned size={14} /> {property.neighborhood} ·{" "}
+                  {property.area.toLocaleString("fa-IR")} متر
+                </p>
+                <div className="mt-4 flex items-end justify-between gap-2">
+                  <div>
+                    <small>ارزش پیشنهادی</small>
+                    <b>
+                      {formatMoney(
+                        property.priceTotal ?? property.depositAmount,
+                      )}
+                    </b>
+                  </div>
+                  <ArrowUpLeft size={18} />
+                </div>
+              </div>
+            </Link>
+          ))}
+          {!recent.length && (
+            <div className="card empty md:col-span-2 xl:col-span-4">
+              هنوز فایل ملکی ثبت نشده است.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="dashboard-insights">
+        <div className="card dashboard-panel dashboard-trend">
+          <div className="dashboard-panel-head">
+            <div>
+              <span className="panel-kicker">تصویر عملکرد</span>
+              <h2>روند شش‌ماهه دفتر</h2>
+            </div>
+            <ChartNoAxesCombined className="text-brick" />
+          </div>
+          <MonthlyChart data={monthlyTrend} />
+        </div>
+        <div className="card dashboard-panel dashboard-status">
+          <div className="dashboard-panel-head">
+            <div>
+              <span className="panel-kicker">سلامت موجودی</span>
+              <h2>وضعیت فایل‌ها</h2>
+            </div>
+          </div>
           <StatusChart
-            data={groups.map((g) => ({
-              name: label(g.status),
-              value: g._count,
+            data={groups.map((group) => ({
+              name: label(group.status),
+              value: group._count,
             }))}
           />
         </div>
+        {canViewCommission && (
+          <Link href="/commissions" className="dashboard-commission">
+            <span>
+              <WalletCards size={23} />
+              <small>کمیسیون وصول‌شده</small>
+            </span>
+            <strong>
+              {formatMoney(commission._sum.receivedAmountToman ?? 0)}
+            </strong>
+            <p>
+              مشاهده جزئیات سهم‌ها و تسویه‌ها <ArrowLeft size={15} />
+            </p>
+          </Link>
+        )}
       </section>
-      <section className="grid lg:grid-cols-2 gap-4 mb-5">
-        <div className="card p-5">
-          <h2 className="font-black text-lg mb-3">بازدیدهای پیش‌رو</h2>
-          {visits.map((v) => (
-            <Link
-              href="/visits"
-              key={v.id}
-              className="flex items-center justify-between border-b py-3"
-            >
-              <div>
-                <b>{v.property.title}</b>
-                <div className="subtle text-xs">{v.applicant.fullName}</div>
-              </div>
-              <span className="badge badge-active">
-                {formatDateTime(v.scheduledAt)}
-              </span>
+
+      <section className="card dashboard-map-panel">
+        <div className="dashboard-panel-head">
+          <div>
+            <span className="panel-kicker">پوشش جغرافیایی</span>
+            <h2>فایل‌های فعال روی نقشه</h2>
+          </div>
+          <Link className="btn" href="/map">
+            نقشه کامل <ArrowLeft size={16} />
+          </Link>
+        </div>
+        <DynamicPropertyMap properties={map} compact />
+      </section>
+
+      {active === 0 && applicants === 0 && (
+        <section className="dashboard-onboarding">
+          <Bot size={28} />
+          <div>
+            <b>آجر آماده شروع کار است</b>
+            <p>
+              ابتدا یک فایل و یک متقاضی ثبت کنید؛ سپس تطبیق هوشمند بهترین
+              گزینه‌ها را پیشنهاد می‌دهد.
+            </p>
+          </div>
+          {canCreateProperty && (
+            <Link className="btn btn-primary" href="/properties/new">
+              شروع ثبت اطلاعات
             </Link>
-          ))}
-        </div>
-        <div className="card p-5">
-          <h2 className="font-black text-lg mb-3">پیگیری‌های مهم</h2>
-          {activities.map((a) => (
-            <Link
-              href="/activities"
-              key={a.id}
-              className="flex items-center gap-3 border-b py-3"
-            >
-              <div
-                className={`w-9 h-9 rounded-xl grid place-items-center ${a.nextActionAt && a.nextActionAt < now ? "bg-red-50 text-red-600" : "bg-orange-50 text-brick"}`}
-              >
-                <Phone size={17} />
-              </div>
-              <div className="flex-1">
-                <b>{a.subject}</b>
-                <div className="subtle text-xs">
-                  {a.contact?.fullName} · {a.user.fullName}
-                </div>
-              </div>
-              <small>
-                {a.nextActionAt ? formatDate(a.nextActionAt) : "—"}
-              </small>
-            </Link>
-          ))}
-        </div>
-      </section>
-      <section className="grid lg:grid-cols-[1.15fr_.85fr] gap-4">
-        <div className="card p-5">
-          <h2 className="font-black text-lg mb-4">روند شش‌ماهه</h2>
-          <MonthlyChart data={monthlyTrend} />
-        </div>
-        <div className="card p-5">
-          <h2 className="font-black text-lg mb-4">مسیر پیشنهادی شروع کار</h2>
-          {[
-            "فایل را روی نقشه پیدا کنید",
-            "متقاضی را ثبت کنید",
-            "تطبیق هوشمند را اجرا کنید",
-            "بازدید و پیگیری را ثبت کنید",
-            "معامله را تا قرارداد مدیریت کنید",
-          ].map((x, i) => (
-            <div className="flex gap-3 items-center py-2" key={x}>
-              <span className="w-7 h-7 bg-ink text-white rounded-lg grid place-items-center">
-                {i + 1}
-              </span>
-              {x}
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
+          )}
+        </section>
+      )}
+    </div>
   );
 }
