@@ -20,12 +20,11 @@ FROM dependencies AS production-dependencies
 RUN npm prune --omit=dev --no-audit --no-fund
 
 
-FROM base AS builder
+FROM dependencies AS builder
 
 ARG NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
 ENV NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
 
-COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN ./node_modules/.bin/prisma generate --schema=prisma/schema.prisma \
     && npm run build

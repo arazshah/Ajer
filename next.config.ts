@@ -21,6 +21,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   experimental: {
     useTypeScriptCli: false,
+    webpackMemoryOptimizations: true,
     serverActions: { bodySizeLimit: "5mb" },
   },
   async headers() {
