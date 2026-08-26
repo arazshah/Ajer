@@ -45,6 +45,8 @@ const optionalUrl = z
     },
   );
 
+const optionalHttpUrl = z.union([z.literal(""), optionalUrl]);
+
 function text(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
 }
@@ -405,6 +407,78 @@ export async function updatePlan(formData: FormData) {
   revalidatePath("/super-admin");
 }
 
+export async function updateDemoRequestAction(formData: FormData) {
+  await requireSuperAdmin();
+  const requestId = text(formData, "requestId");
+  const status = text(formData, "status");
+  const followUpNote = text(formData, "followUpNote").slice(0, 1500);
+  const allowed = [
+    "NEW",
+    "CONTACTED",
+    "DEMO_SCHEDULED",
+    "TRIAL_STARTED",
+    "WON",
+    "LOST",
+    "ARCHIVED",
+  ] as const;
+  if (!allowed.includes(status as (typeof allowed)[number])) return;
+  await db.demoRequest.updateMany({
+    where: { id: requestId },
+    data: {
+      status: status as (typeof allowed)[number],
+      followUpNote: followUpNote || null,
+      ...(["CONTACTED", "DEMO_SCHEDULED", "TRIAL_STARTED", "WON"].includes(
+        status,
+      )
+        ? { contactedAt: new Date() }
+        : {}),
+    },
+  });
+  revalidatePath("/super-admin");
+}
+
+export async function createTestimonialAction(formData: FormData) {
+  await requireSuperAdmin();
+  const input = z
+    .object({
+      customerName: z.string().trim().min(3).max(80),
+      agencyName: z.string().trim().min(2).max(120),
+      city: z.string().trim().max(80),
+      quote: z.string().trim().min(15).max(700),
+      result: z.string().trim().max(160),
+      sortOrder: z.coerce.number().int().min(0).max(999),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!input.success) return;
+  await db.customerTestimonial.create({
+    data: {
+      ...input.data,
+      city: input.data.city || null,
+      result: input.data.result || null,
+      isPublished: formData.get("isPublished") === "on",
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/super-admin");
+}
+
+export async function updateTestimonialAction(formData: FormData) {
+  await requireSuperAdmin();
+  const id = text(formData, "testimonialId");
+  const sortOrder = Number(text(formData, "sortOrder"));
+  if (!Number.isSafeInteger(sortOrder) || sortOrder < 0 || sortOrder > 999)
+    return;
+  await db.customerTestimonial.updateMany({
+    where: { id },
+    data: {
+      sortOrder,
+      isPublished: formData.get("isPublished") === "on",
+    },
+  });
+  revalidatePath("/");
+  revalidatePath("/super-admin");
+}
+
 export async function updatePlatformSettings(
   _: PlatformSettingsState,
   formData: FormData,
@@ -427,6 +501,7 @@ export async function updatePlatformSettings(
             z.string().trim().email("ایمیل پشتیبانی معتبر نیست."),
           ]),
           supportPhone: z.string().trim().max(30),
+          demoVideoUrl: optionalHttpUrl,
           trialDays: z.coerce
             .number()
             .int()
@@ -438,6 +513,7 @@ export async function updatePlatformSettings(
           appUrl: text(formData, "appUrl"),
           supportEmail: text(formData, "supportEmail"),
           supportPhone: text(formData, "supportPhone"),
+          demoVideoUrl: text(formData, "demoVideoUrl"),
           trialDays: text(formData, "trialDays"),
         });
       await savePlatformSettings({
@@ -445,6 +521,7 @@ export async function updatePlatformSettings(
         [KEYS.appUrl]: input.appUrl.replace(/\/$/, ""),
         [KEYS.supportEmail]: input.supportEmail,
         [KEYS.supportPhone]: input.supportPhone,
+        [KEYS.demoVideoUrl]: input.demoVideoUrl,
         [KEYS.trialDays]: String(input.trialDays),
         [KEYS.signupEnabled]: String(formData.get("signupEnabled") === "on"),
       });

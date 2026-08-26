@@ -17,6 +17,9 @@ import {
   Eye,
   LayoutDashboard,
   ChevronDown,
+  Megaphone,
+  Quote,
+  PhoneCall,
 } from "lucide-react";
 import Link from "next/link";
 import type { Prisma } from "@prisma/client";
@@ -32,6 +35,9 @@ import {
   updatePlan,
   revokeAgencySessionsAction,
   reviewBillingRequest,
+  updateDemoRequestAction,
+  createTestimonialAction,
+  updateTestimonialAction,
 } from "./actions";
 import {
   billingRequestBadge,
@@ -45,6 +51,7 @@ export const metadata = { title: "داشبورد مدیریت کل" };
 const sections = {
   overview: { label: "نمای کلی", icon: LayoutDashboard },
   billing: { label: "تمدیدها", icon: FileCheck2 },
+  marketing: { label: "فروش و دمو", icon: Megaphone },
   agencies: { label: "دفاتر", icon: Building2 },
   security: { label: "امنیت", icon: LockKeyhole },
   integrations: { label: "سرویس‌ها", icon: Bot },
@@ -68,6 +75,16 @@ const securityEventLabels: Record<string, string> = {
   BILLING_REQUEST_APPROVED: "تأیید درخواست تمدید",
   BILLING_REQUEST_REJECTED: "رد درخواست تمدید",
   BILLING_REQUEST_NEEDS_INFO: "درخواست اطلاعات تمدید",
+};
+
+const demoStatusLabels: Record<string, string> = {
+  NEW: "جدید",
+  CONTACTED: "تماس گرفته شد",
+  DEMO_SCHEDULED: "دمو هماهنگ شد",
+  TRIAL_STARTED: "آزمایش فعال شد",
+  WON: "مشتری شد",
+  LOST: "از دست رفت",
+  ARCHIVED: "بایگانی",
 };
 
 function SecretField({
@@ -161,6 +178,9 @@ export default async function SuperAdminPage({
     billingTotalCount,
     billingApprovedCount,
     billingRejectedCount,
+    demoRequests,
+    testimonials,
+    openDemoCount,
   ] = await Promise.all([
     db.agency.findMany({
       include: { _count: { select: { users: true, properties: true } } },
@@ -224,6 +244,19 @@ export default async function SuperAdminPage({
     db.billingRequest.count(),
     db.billingRequest.count({ where: { status: "APPROVED" } }),
     db.billingRequest.count({ where: { status: "REJECTED" } }),
+    db.demoRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: section === "marketing" ? 100 : 0,
+    }),
+    db.customerTestimonial.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      take: section === "marketing" ? 100 : 0,
+    }),
+    db.demoRequest.count({
+      where: {
+        status: { in: ["NEW", "CONTACTED", "DEMO_SCHEDULED", "TRIAL_STARTED"] },
+      },
+    }),
   ]);
   const providerStats = ["AI", "SMS_IR", "ZARINPAL"].map((provider) => {
     const events = integrationEvents.filter(
@@ -273,6 +306,11 @@ export default async function SuperAdminPage({
                 {key === "billing" && billingOpenCount > 0 && (
                   <span className="grid min-w-5 place-items-center rounded-full bg-brick px-1 text-xs text-white">
                     {billingOpenCount.toLocaleString("fa-IR")}
+                  </span>
+                )}
+                {key === "marketing" && openDemoCount > 0 && (
+                  <span className="grid min-w-5 place-items-center rounded-full bg-blue-600 px-1 text-xs text-white">
+                    {openDemoCount.toLocaleString("fa-IR")}
                   </span>
                 )}
               </Link>
@@ -419,7 +457,280 @@ export default async function SuperAdminPage({
                 </div>
               </div>
             </div>
+            {openDemoCount > 0 && (
+              <Link
+                className="card mb-8 flex items-center justify-between gap-4 p-5 transition hover:border-blue-300"
+                href="/super-admin?section=marketing"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="grid size-11 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                    <PhoneCall />
+                  </span>
+                  <span>
+                    <b className="block">درخواست‌های دموی نیازمند پیگیری</b>
+                    <small className="subtle">سرنخ‌های ورودی صفحه اصلی</small>
+                  </span>
+                </span>
+                <span className="badge badge-warn">
+                  {openDemoCount.toLocaleString("fa-IR")} درخواست باز
+                </span>
+              </Link>
+            )}
           </>
+        )}
+
+        {section === "marketing" && (
+          <section className="grid gap-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="card stat">
+                <PhoneCall className="text-blue-600" />
+                <strong>{demoRequests.length.toLocaleString("fa-IR")}</strong>
+                <span className="subtle">درخواست نمایش‌داده‌شده</span>
+              </div>
+              <div className="card stat">
+                <CheckCircle2 className="text-emerald-600" />
+                <strong>
+                  {demoRequests
+                    .filter((item) => item.status === "WON")
+                    .length.toLocaleString("fa-IR")}
+                </strong>
+                <span className="subtle">تبدیل‌شده به مشتری</span>
+              </div>
+              <div className="card stat">
+                <Quote className="text-violet-600" />
+                <strong>
+                  {testimonials
+                    .filter((item) => item.isPublished)
+                    .length.toLocaleString("fa-IR")}
+                </strong>
+                <span className="subtle">رضایت‌نامه منتشرشده</span>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-black">درخواست‌های دمو</h2>
+              <p className="subtle mt-1 text-sm">
+                وضعیت تماس و نتیجه هر سرنخ را ثبت کنید تا هیچ پیگیری از دست
+                نرود.
+              </p>
+              <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                {demoRequests.map((request) => (
+                  <details
+                    className="card group overflow-hidden"
+                    key={request.id}
+                  >
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5">
+                      <span>
+                        <b className="block">{request.agencyName}</b>
+                        <small className="subtle mt-1 block">
+                          {request.managerName} · {request.cityArea} ·{" "}
+                          {request.consultantCount.toLocaleString("fa-IR")}{" "}
+                          مشاور
+                        </small>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`badge ${request.status === "WON" ? "badge-active" : request.status === "LOST" ? "badge-danger" : "badge-warn"}`}
+                        >
+                          {demoStatusLabels[request.status]}
+                        </span>
+                        <ChevronDown
+                          className="transition group-open:rotate-180"
+                          size={18}
+                        />
+                      </span>
+                    </summary>
+                    <form
+                      action={updateDemoRequestAction}
+                      className="grid gap-4 border-t bg-slate-50 p-5"
+                    >
+                      <input
+                        type="hidden"
+                        name="requestId"
+                        value={request.id}
+                      />
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <a
+                          className="btn bg-white ltr"
+                          href={`tel:${request.mobile}`}
+                        >
+                          <PhoneCall size={16} /> {request.mobile}
+                        </a>
+                        <small className="subtle">
+                          ثبت: {formatDateTime(request.createdAt)}
+                        </small>
+                      </div>
+                      <label>
+                        <span className="label">وضعیت فروش</span>
+                        <select
+                          className="select"
+                          name="status"
+                          defaultValue={request.status}
+                        >
+                          {Object.entries(demoStatusLabels).map(
+                            ([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      </label>
+                      <label>
+                        <span className="label">یادداشت پیگیری</span>
+                        <textarea
+                          className="textarea"
+                          name="followUpNote"
+                          defaultValue={request.followUpNote || ""}
+                          maxLength={1500}
+                          rows={3}
+                        />
+                      </label>
+                      <button className="btn btn-dark justify-center">
+                        ذخیره وضعیت و یادداشت
+                      </button>
+                    </form>
+                  </details>
+                ))}
+                {!demoRequests.length && (
+                  <div className="card empty xl:col-span-2">
+                    هنوز درخواست دمویی ثبت نشده است.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+              <form
+                action={createTestimonialAction}
+                className="card grid gap-4 p-5"
+              >
+                <div>
+                  <h2 className="text-xl font-black">افزودن رضایت مشتری</h2>
+                  <p className="subtle mt-1 text-sm">
+                    فقط رضایت واقعی و با اجازه مشتری منتشر شود.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label>
+                    <span className="label">نام مشتری</span>
+                    <input className="input" name="customerName" required />
+                  </label>
+                  <label>
+                    <span className="label">نام دفتر</span>
+                    <input className="input" name="agencyName" required />
+                  </label>
+                  <label>
+                    <span className="label">شهر</span>
+                    <input className="input" name="city" />
+                  </label>
+                  <label>
+                    <span className="label">ترتیب نمایش</span>
+                    <input
+                      className="input ltr text-right"
+                      type="number"
+                      min="0"
+                      max="999"
+                      name="sortOrder"
+                      defaultValue="0"
+                      required
+                    />
+                  </label>
+                </div>
+                <label>
+                  <span className="label">متن رضایت</span>
+                  <textarea
+                    className="textarea"
+                    name="quote"
+                    minLength={15}
+                    maxLength={700}
+                    rows={4}
+                    required
+                  />
+                </label>
+                <label>
+                  <span className="label">
+                    نتیجه کوتاه و قابل اثبات (اختیاری)
+                  </span>
+                  <input
+                    className="input"
+                    name="result"
+                    maxLength={160}
+                    placeholder="مثلاً: همه پیگیری‌های تیم یکجا شد"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" name="isPublished" /> بلافاصله در صفحه
+                  اصلی منتشر شود
+                </label>
+                <button className="btn btn-primary justify-center">
+                  ثبت رضایت مشتری
+                </button>
+              </form>
+
+              <div className="card p-5">
+                <h2 className="text-xl font-black">رضایت‌های ثبت‌شده</h2>
+                <div className="mt-4 grid gap-3">
+                  {testimonials.map((item) => (
+                    <form
+                      action={updateTestimonialAction}
+                      className="rounded-xl border p-4"
+                      key={item.id}
+                    >
+                      <input
+                        type="hidden"
+                        name="testimonialId"
+                        value={item.id}
+                      />
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <b>
+                            {item.customerName} · {item.agencyName}
+                          </b>
+                          <small className="subtle mt-1 block">
+                            {item.city || "بدون شهر"}
+                          </small>
+                        </div>
+                        <span
+                          className={`badge ${item.isPublished ? "badge-active" : "badge-warn"}`}
+                        >
+                          {item.isPublished ? "منتشرشده" : "پیش‌نویس"}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-7 text-slate-600">
+                        «{item.quote}»
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            name="isPublished"
+                            defaultChecked={item.isPublished}
+                          />{" "}
+                          انتشار
+                        </label>
+                        <label className="flex items-center gap-2 text-sm">
+                          ترتیب{" "}
+                          <input
+                            className="input w-20 py-2 ltr"
+                            type="number"
+                            name="sortOrder"
+                            min="0"
+                            max="999"
+                            defaultValue={item.sortOrder}
+                          />
+                        </label>
+                        <button className="btn mr-auto py-2">ذخیره</button>
+                      </div>
+                    </form>
+                  ))}
+                  {!testimonials.length && (
+                    <p className="empty">هنوز رضایت مشتری ثبت نشده است.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
         )}
 
         {section === "security" && (
@@ -642,6 +953,20 @@ export default async function SuperAdminPage({
                       name="supportPhone"
                       defaultValue={settings.platform.supportPhone}
                     />
+                  </label>
+                  <label className="md:col-span-2">
+                    <span className="label">نشانی ویدئوی دموی ۹۰ ثانیه‌ای</span>
+                    <input
+                      className="input ltr text-right"
+                      name="demoVideoUrl"
+                      type="url"
+                      placeholder="https://www.aparat.com/video/video/embed/..."
+                      defaultValue={settings.platform.demoVideoUrl}
+                    />
+                    <small className="subtle mt-1 block">
+                      نشانی قابل نمایش در iframe از آپارات، یوتیوب یا سرویس
+                      ویدئو را وارد کنید.
+                    </small>
                   </label>
                   <label>
                     <span className="label">مدت آزمایش (روز)</span>

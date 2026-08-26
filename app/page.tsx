@@ -11,8 +11,19 @@ import {
   Sparkles,
   Users,
   Workflow,
+  Database,
+  Headphones,
+  PlayCircle,
+  PhoneCall,
+  Quote,
+  UploadCloud,
 } from "lucide-react";
 import { DEFAULT_PLANS, formatToman } from "@/lib/plans";
+import { db } from "@/lib/db";
+import { getPlatformSettings } from "@/lib/platform-settings";
+import { DemoRequestForm } from "@/components/demo-request-form";
+
+export const dynamic = "force-dynamic";
 
 const features = [
   [
@@ -47,7 +58,15 @@ const features = [
   ],
 ] as const;
 
-export default function Home() {
+export default async function Home() {
+  const [settings, testimonials] = await Promise.all([
+    getPlatformSettings(),
+    db.customerTestimonial.findMany({
+      where: { isPublished: true },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      take: 6,
+    }),
+  ]);
   return (
     <main className="landing min-h-screen bg-[#fbfaf7] overflow-hidden">
       <header className="landing-nav">
@@ -64,6 +83,7 @@ export default function Home() {
           <a href="#security">امنیت</a>
           <a href="#pricing">تعرفه‌ها</a>
           <a href="#how">نحوه شروع</a>
+          <a href="#request-demo">درخواست دمو</a>
         </nav>
         <div className="flex gap-2">
           <Link href="/login" className="btn hidden sm:inline-flex">
@@ -99,6 +119,9 @@ export default function Home() {
             </Link>
             <a href="#features" className="btn text-base px-6 py-3">
               دیدن امکانات
+            </a>
+            <a href="#request-demo" className="btn text-base px-6 py-3">
+              درخواست دموی ۲۰ دقیقه‌ای
             </a>
           </div>
           <div className="flex flex-wrap gap-5 mt-7 text-sm text-slate-600">
@@ -266,6 +289,9 @@ export default function Home() {
             <li>
               <Check /> گزارش فعالیت و سطح دسترسی کاربران
             </li>
+            <li>
+              <Check /> مالکیت اطلاعات و سوابق برای همان دفتر محفوظ است
+            </li>
           </ul>
         </div>
         <div className="privacy-visual">
@@ -356,6 +382,161 @@ export default function Home() {
           </article>
         </div>
       </section>
+      <section id="demo-video" className="marketing-tour">
+        <div className="marketing-tour-copy">
+          <span className="hero-pill">
+            <PlayCircle size={16} /> دموی سریع محصول
+          </span>
+          <h2>آجر را در ۹۰ ثانیه ببینید</h2>
+          <p>
+            مسیر واقعی کار یک دفتر را از ثبت فایل و متقاضی تا تطبیق، بازدید،
+            معامله و محاسبه کمیسیون دنبال کنید.
+          </p>
+          <div className="marketing-tour-steps">
+            <span>
+              <b>۱</b> فایل و متقاضی
+            </span>
+            <span>
+              <b>۲</b> تطبیق و پیگیری
+            </span>
+            <span>
+              <b>۳</b> قرارداد و کمیسیون
+            </span>
+          </div>
+          <a href="#request-demo" className="btn btn-primary">
+            نمایش با اطلاعات دفتر من <ArrowLeft size={17} />
+          </a>
+        </div>
+        <div className="marketing-video-frame">
+          {settings.platform.demoVideoUrl ? (
+            <iframe
+              src={settings.platform.demoVideoUrl}
+              title="ویدئوی معرفی ۹۰ ثانیه‌ای آجر"
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          ) : (
+            <div className="marketing-video-placeholder">
+              <span className="marketing-play">
+                <PlayCircle size={55} />
+              </span>
+              <div className="mini-pipeline">
+                <span>فایل</span>
+                <ArrowLeft />
+                <span>متقاضی</span>
+                <ArrowLeft />
+                <span>معامله</span>
+              </div>
+              <b>یک نگاه سریع به گردش‌کار آجر</b>
+              <small>
+                برای مشاهده زنده، دموی اختصاصی دفترتان را درخواست کنید.
+              </small>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="onboarding-section">
+        <div className="landing-heading">
+          <span>شروع بدون دردسر</span>
+          <h2>در راه‌اندازی اولیه تنها نیستید</h2>
+          <p>تیم آجر کمک می‌کند دفتر شما سریع‌تر به اولین نتیجه واقعی برسد.</p>
+        </div>
+        <div className="onboarding-grid">
+          <article>
+            <UploadCloud />
+            <h3>ورود اطلاعات اولیه</h3>
+            <p>
+              فایل‌ها و متقاضیان اولیه را همراه شما وارد می‌کنیم تا کار از یک
+              صفحه خالی شروع نشود.
+            </p>
+          </article>
+          <article>
+            <Headphones />
+            <h3>راه‌اندازی همراه کارشناس</h3>
+            <p>
+              کاربران، نقش‌ها و روند کاری دفتر در جلسه شروع تنظیم و آموزش داده
+              می‌شوند.
+            </p>
+          </article>
+          <article>
+            <Database />
+            <h3>مالکیت روشن داده</h3>
+            <p>
+              اطلاعات متعلق به دفتر شماست و هیچ دفتر دیگری امکان مشاهده آن را
+              ندارد.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      {testimonials.length > 0 && (
+        <section className="testimonial-section">
+          <div className="landing-heading">
+            <span>تجربه مشتریان</span>
+            <h2>مدیران دفاتر درباره آجر چه می‌گویند؟</h2>
+          </div>
+          <div className="testimonial-grid">
+            {testimonials.map((item) => (
+              <article key={item.id}>
+                <Quote />
+                <blockquote>{item.quote}</blockquote>
+                {item.result && <span>{item.result}</span>}
+                <footer>
+                  <b>{item.customerName}</b>
+                  <small>
+                    {item.agencyName}
+                    {item.city ? ` · ${item.city}` : ""}
+                  </small>
+                </footer>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section id="request-demo" className="demo-request-section">
+        <div className="demo-request-copy">
+          <span className="hero-pill">
+            <PhoneCall size={16} /> مشاوره و نمایش اختصاصی
+          </span>
+          <h2>آجر را با سناریوی واقعی دفتر خودتان ببینید</h2>
+          <p>
+            در یک جلسه ۲۰ دقیقه‌ای، مسیر فایل تا قرارداد را متناسب با اندازه و
+            روش کاری دفترتان نمایش می‌دهیم و برای ورود اطلاعات اولیه همراهتان
+            هستیم.
+          </p>
+          <ul>
+            <li>
+              <Check /> بدون تعهد به خرید
+            </li>
+            <li>
+              <Check /> پاسخ شفاف به پرسش‌های امنیت و مالکیت داده
+            </li>
+            <li>
+              <Check /> پیشنهاد مسیر راه‌اندازی متناسب با دفتر شما
+            </li>
+          </ul>
+          <a
+            className="btn demo-phone"
+            href={
+              settings.platform.supportPhone
+                ? `tel:${settings.platform.supportPhone}`
+                : "#demo-form"
+            }
+          >
+            <PhoneCall size={18} />
+            {settings.platform.supportPhone
+              ? "تماس با مشاور آجر"
+              : "درخواست تماس با مشاور آجر"}
+            {settings.platform.supportPhone && (
+              <span className="ltr">{settings.platform.supportPhone}</span>
+            )}
+          </a>
+        </div>
+        <DemoRequestForm />
+      </section>
       <section className="final-cta">
         <Building2 size={48} />
         <h2>آماده‌اید دفتر املاک حرفه‌ای‌تری بسازید؟</h2>
@@ -376,6 +557,7 @@ export default function Home() {
           <Link href="/login">ورود</Link>
           <Link href="/signup">ثبت‌نام</Link>
           <a href="#pricing">تعرفه‌ها</a>
+          <a href="#request-demo">درخواست دمو</a>
         </div>
         <p>
           طراحی و توسعه توسط{" "}

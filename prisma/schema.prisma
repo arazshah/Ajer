@@ -366,6 +366,16 @@ enum PropertyMediaType {
   VIRTUAL_TOUR
 }
 
+enum DemoRequestStatus {
+  NEW
+  CONTACTED
+  DEMO_SCHEDULED
+  TRIAL_STARTED
+  WON
+  LOST
+  ARCHIVED
+}
+
 model Agency {
   id                  String               @id @default(cuid())
   slug                String               @unique
@@ -1622,4 +1632,36 @@ model PlatformSetting {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model DemoRequest {
+  id              String            @id @default(cuid())
+  managerName     String
+  mobile          String
+  agencyName      String
+  cityArea        String
+  consultantCount Int
+  status          DemoRequestStatus @default(NEW)
+  followUpNote    String?
+  contactedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([status, createdAt])
+  @@index([mobile, createdAt])
+}
+
+model CustomerTestimonial {
+  id           String   @id @default(cuid())
+  customerName String
+  agencyName   String
+  city         String?
+  quote        String
+  result       String?
+  isPublished  Boolean  @default(false)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isPublished, sortOrder])
 }
