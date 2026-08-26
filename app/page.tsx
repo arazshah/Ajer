@@ -417,22 +417,16 @@ export default async function Home() {
               allowFullScreen
             />
           ) : (
-            <div className="marketing-video-placeholder">
-              <span className="marketing-play">
-                <PlayCircle size={55} />
-              </span>
-              <div className="mini-pipeline">
-                <span>فایل</span>
-                <ArrowLeft />
-                <span>متقاضی</span>
-                <ArrowLeft />
-                <span>معامله</span>
-              </div>
-              <b>یک نگاه سریع به گردش‌کار آجر</b>
-              <small>
-                برای مشاهده زنده، دموی اختصاصی دفترتان را درخواست کنید.
-              </small>
-            </div>
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              poster="/marketing/ajer-demo-poster.webp"
+              aria-label="دموی ۹۰ ثانیه‌ای گردش‌کار آجر"
+            >
+              <source src="/marketing/ajer-demo-90s.mp4" type="video/mp4" />
+              مرورگر شما امکان پخش این ویدئو را ندارد.
+            </video>
           )}
         </div>
       </section>
